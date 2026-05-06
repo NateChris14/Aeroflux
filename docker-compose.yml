@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: ./aeroflux-backend
+      dockerfile: Dockerfile
+    container_name: aeroflux-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENSKY_MODE=simulation
+      - TICK_INTERVAL_S=20
+      - LOG_LEVEL=INFO
+      # LLM Provider: Set LLM_PROVIDER in .env to "groq" or "ollama"
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - LLM_API_KEY=${GROQ_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-llama-3.1-8b-instant}
+      - LLM_URL=${LLM_URL:-https://api.groq.com/openai/v1}
+      - USE_LLM_AGENTS=true
+    volumes:
+      - ./aeroflux-backend:/app
+    networks:
+      - aeroflux-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./aeroflux-frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_MAPBOX_TOKEN=${VITE_MAPBOX_TOKEN}
+    container_name: aeroflux-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - aeroflux-network
+    restart: unless-stopped
+
+networks:
+  aeroflux-network:
+    driver: bridge

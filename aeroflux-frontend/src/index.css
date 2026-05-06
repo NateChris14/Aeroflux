@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: #050a14;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Font families */
+.font-sans {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* Glassmorphism effect */
+.glass {
+  background: rgba(13, 21, 32, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Animation keyframes */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+/* Three.js canvas styles */
+canvas {
+  display: block;
+}
+
+/* Prevent text selection on UI elements */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Smooth transitions for all interactive elements */
+button, .interactive {
+  transition: all 0.2s ease;
+}
+
+/* Focus styles */
+button:focus-visible {
+  outline: 2px solid #06b6d4;
+  outline-offset: 2px;
+}
+
+/* Panel inner glow */
+.panel-glow {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ATC aircraft marker base */
+.atc-marker-wrapper {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  cursor: default;
+}
+
+/* Proximity alert pulsing ring */
+@keyframes atc-proximity-pulse {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  70%  { transform: scale(2.2); opacity: 0.0; }
+  100% { transform: scale(0.6); opacity: 0.0; }
+}
+
+.atc-proximity-ring {
+  display: none;
+  position: absolute;
+  inset: -2px;
+  border: 2px solid #ef4444;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: atc-proximity-pulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.atc-proximity .atc-proximity-ring {
+  display: block;
+}
+
+/* ATC data tag */
+.atc-data-tag {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(13, 21, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  padding: 3px 7px;
+  white-space: nowrap;
+  pointer-events: none;
+  line-height: 1.4;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Main aircraft proximity alert ring */
+@keyframes aircraft-proximity-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  60%  { box-shadow: 0 0 0 18px rgba(239, 68, 68, 0.0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.0); }
+}
+
+.aircraft-proximity-alert {
+  animation: aircraft-proximity-pulse 1.4s ease-out infinite;
+  border-radius: 50%;
+}
