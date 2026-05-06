@@ -49,31 +49,43 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/** Create the aircraft SVG marker element */
+/** Create the aircraft SVG marker element — top-down airplane silhouette */
 function makeAircraftEl(inProximity = false): HTMLDivElement {
   const el = document.createElement('div');
-  el.style.cssText = `width:36px;height:36px;cursor:pointer;position:relative;`;
+  el.style.cssText = `width:42px;height:42px;cursor:pointer;position:relative;`;
   if (inProximity) el.className = 'aircraft-proximity-alert';
   el.innerHTML = `
-    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="18" cy="18" r="17" fill="rgba(249,115,22,0.12)" stroke="rgba(249,115,22,0.4)" stroke-width="1"/>
-      <path d="M18 6L28 24H8L18 6Z" fill="#f97316" opacity="0.95"/>
-      <rect x="11" y="20" width="14" height="3" rx="1.5" fill="#f97316" opacity="0.7"/>
-      <circle cx="18" cy="18" r="2.5" fill="#fff" opacity="0.9"/>
+    <svg width="42" height="42" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="21" cy="21" r="20" fill="rgba(249,115,22,0.13)" stroke="rgba(249,115,22,0.45)" stroke-width="1.5"/>
+      <!-- Fuselage -->
+      <ellipse cx="21" cy="21" rx="2.8" ry="12" fill="#f97316"/>
+      <!-- Main wings swept back -->
+      <path d="M21 18 L4 28 L21 23 L38 28 Z" fill="#f97316" opacity="0.92"/>
+      <!-- Tail fins -->
+      <path d="M21 31 L14 37 L21 33 L28 37 Z" fill="#f97316" opacity="0.80"/>
+      <!-- Nose highlight -->
+      <circle cx="21" cy="9.5" r="2.2" fill="#fff" opacity="0.85"/>
     </svg>`;
   return el;
 }
 
-/** Create an ATC secondary aircraft marker element */
+/** Create an ATC secondary aircraft marker element — top-down plane silhouette */
 function makeAtcEl(ac: ATCTraffic, showTag: boolean, inProximity: boolean): HTMLDivElement {
   const wrapper = document.createElement('div');
   wrapper.className = `atc-marker-wrapper${inProximity ? ' atc-proximity' : ''}`;
   wrapper.dataset.callsign = ac.callsign;
+  const color = inProximity ? '#ef4444' : '#94a3b8';
+  const opacity = inProximity ? 0.95 : 0.78;
 
   wrapper.innerHTML = `
     <div class="atc-proximity-ring"></div>
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style="transform:rotate(${ac.heading_deg}deg);display:block;">
-      <path d="M9 2L16 14H2L9 2Z" fill="${inProximity ? '#ef4444' : '#94a3b8'}" opacity="${inProximity ? 0.95 : 0.75}"/>
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" style="transform:rotate(${ac.heading_deg}deg);display:block;">
+      <!-- Fuselage -->
+      <ellipse cx="11" cy="11" rx="1.8" ry="7.5" fill="${color}" opacity="${opacity}"/>
+      <!-- Wings -->
+      <path d="M11 10 L2 16 L11 13 L20 16 Z" fill="${color}" opacity="${opacity}"/>
+      <!-- Tail -->
+      <path d="M11 17.5 L7 21 L11 19 L15 21 Z" fill="${color}" opacity="${Math.max(0, opacity - 0.15)}"/>
     </svg>
     <div class="atc-data-tag" style="display:${showTag ? 'block' : 'none'};">
       <strong>${ac.callsign}</strong><br>FL${ac.altitude_fl} · ${ac.speed_kts}kt
@@ -89,14 +101,15 @@ function updateAtcEl(
   inProximity: boolean,
 ): void {
   el.className = `atc-marker-wrapper${inProximity ? ' atc-proximity' : ''}`;
+  const color = inProximity ? '#ef4444' : '#94a3b8';
+  const opacity = inProximity ? '0.95' : '0.78';
   const svg = el.querySelector('svg');
   if (svg) {
     svg.style.transform = `rotate(${ac.heading_deg}deg)`;
-    const path = svg.querySelector('path');
-    if (path) {
-      path.setAttribute('fill', inProximity ? '#ef4444' : '#94a3b8');
-      path.setAttribute('opacity', inProximity ? '0.95' : '0.75');
-    }
+    svg.querySelectorAll('ellipse, path').forEach(shape => {
+      shape.setAttribute('fill', color);
+      shape.setAttribute('opacity', opacity);
+    });
   }
   const tag = el.querySelector('.atc-data-tag') as HTMLElement | null;
   if (tag) {

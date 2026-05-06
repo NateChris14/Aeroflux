@@ -37,10 +37,14 @@ class OllamaService:
             }
             self.model = defaults.get(provider, "ollama/llama3.2")
         
-        self.base_url = base_url or settings.LLM_URL or settings.OLLAMA_URL
+        # Only fall back to OLLAMA_URL when using the ollama provider
+        if settings.LLM_PROVIDER == "ollama":
+            self.base_url = base_url or settings.LLM_URL or settings.OLLAMA_URL
+        else:
+            self.base_url = base_url or settings.LLM_URL  # Empty string → don't override provider endpoint
         self.api_key = settings.LLM_API_KEY
-        
-        logger.info(f"OllamaService initialized: model={self.model}, url={self.base_url}")
+
+        logger.info(f"LLM service ready: provider={settings.LLM_PROVIDER}, model={self.model}, api_base={'<default>' if not self.base_url else self.base_url}")
     
     async def generate(self, prompt: str, system: str = None, temperature: float = 0.3) -> str:
         """Generate text using LiteLLM."""
@@ -61,9 +65,11 @@ class OllamaService:
             # Add provider-specific configs
             if self.api_key:
                 kwargs["api_key"] = self.api_key
+            # Only set api_base for ollama (custom endpoint) or explicitly configured URL
+            # For groq/openai, LiteLLM resolves the endpoint from the model string prefix
             if self.base_url and settings.LLM_PROVIDER == "ollama":
                 kwargs["api_base"] = self.base_url
-            elif self.base_url and settings.LLM_PROVIDER in ["groq", "openai"]:
+            elif self.base_url and settings.LLM_PROVIDER not in ("groq", "openai"):
                 kwargs["api_base"] = self.base_url
             
             response = await acompletion(**kwargs)

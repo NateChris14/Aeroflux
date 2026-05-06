@@ -1,6 +1,6 @@
 import { useSimulation } from '../../context/SimulationContext';
 import { Sparkline } from './Sparkline';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Cpu, Brain } from 'lucide-react';
 
 export function LeftPanel() {
   const {
@@ -51,9 +51,9 @@ export function LeftPanel() {
   type TelemetryItem = (typeof telemetry)[number];
 
   const getDeltaIcon = (delta: number) => {
-    if (delta > 0) return <TrendingUp  size={10} className="text-af-green" />;
-    if (delta < 0) return <TrendingDown size={10} className="text-af-red"  />;
-    return <Minus size={10} className="text-white/30" />;
+    if (delta > 0) return <TrendingUp  size={11} className="text-af-green" />;
+    if (delta < 0) return <TrendingDown size={11} className="text-af-red"  />;
+    return <Minus size={11} className="text-white/25" />;
   };
 
   const agentColors: Record<string, string> = {
@@ -68,44 +68,87 @@ export function LeftPanel() {
     warning:  'bg-af-yellow',
     critical: 'bg-af-red',
   };
+  const severityLabel: Record<string, string> = {
+    info:     'text-af-green/70',
+    warning:  'text-af-yellow/80',
+    critical: 'text-af-red/80',
+  };
 
-  const latestMessages = agentMessages.slice(-4);
+  // Determine LLM status from recent messages
+  const latestMessages = agentMessages.slice(-5);
+  const lastMsg = agentMessages[agentMessages.length - 1];
+  const hasActivity = agentMessages.length > 0;
+
+  const phaseLabel: Record<string, string> = {
+    CLIMB:     'CLIMB',
+    CRUISE:    'CRUISE',
+    DESCENT:   'DESCENT',
+    DEVIATION: 'DIVERT',
+  };
+  const phaseColor: Record<string, string> = {
+    CLIMB:     'text-af-green  bg-af-green/10  border-af-green/30',
+    CRUISE:    'text-af-cyan   bg-af-cyan/10   border-af-cyan/30',
+    DESCENT:   'text-af-yellow bg-af-yellow/10 border-af-yellow/30',
+    DEVIATION: 'text-af-orange bg-af-orange/10 border-af-orange/30',
+  };
 
   return (
-    <aside className="w-[260px] min-w-[220px] max-w-[280px] bg-af-panel border-r border-white/[0.06] flex flex-col overflow-hidden shrink-0">
+    <aside className="w-[270px] min-w-[230px] max-w-[290px] bg-af-panel border-r border-white/[0.06] flex flex-col overflow-hidden shrink-0">
       {/* Flight Identity */}
-      <div className="p-4 border-b border-white/[0.06]">
-        <h1 className="font-sans font-bold text-xl text-white">{flightState.callsign}</h1>
-        <div className="flex items-center gap-2 mt-1 text-sm text-white/60 flex-wrap">
-          <span>{origin?.label} ({origin?.id})</span>
-          <span>→</span>
-          <span>{destination?.label} ({destination?.id})</span>
+      <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-mono font-bold text-2xl text-white tracking-wide leading-none">
+              {flightState.callsign}
+            </h1>
+            <p className="mt-1 text-sm text-white/55 font-sans">
+              {origin?.label} → {destination?.label}
+            </p>
+          </div>
+          <span className={`mt-0.5 px-2 py-0.5 rounded border text-[11px] font-mono font-semibold tracking-wider ${phaseColor[flightState.phase] || 'text-white/50 bg-white/5 border-white/20'}`}>
+            {phaseLabel[flightState.phase] || flightState.phase}
+          </span>
         </div>
-        <div className="mt-2 inline-flex items-center px-2 py-1 bg-af-card rounded text-xs text-white/50">
-          {flightState.aircraft_type}
+        <div className="mt-2 flex items-center gap-2">
+          <span className="inline-flex items-center px-2 py-0.5 bg-af-card rounded border border-white/[0.08] text-[11px] text-white/45 font-mono">
+            {flightState.aircraft_type}
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-white/[0.08] text-[11px] font-mono bg-af-card">
+            {hasActivity ? (
+              <>
+                <Brain size={10} className="text-af-cyan" />
+                <span className="text-af-cyan/80">LLM</span>
+              </>
+            ) : (
+              <>
+                <Cpu size={10} className="text-white/30" />
+                <span className="text-white/30">STANDBY</span>
+              </>
+            )}
+          </span>
         </div>
       </div>
 
       {/* Telemetry Grid */}
-      <div className="p-4 pb-2">
+      <div className="px-4 pt-3 pb-2">
+        <p className="font-mono text-[10px] text-white/35 uppercase tracking-widest mb-2">Live Telemetry</p>
         <div className="grid grid-cols-2 gap-1.5">
           {telemetry.map((item: TelemetryItem) => (
-            <div key={item.label} className="bg-af-card rounded-lg p-2 border border-white/[0.06]">
+            <div key={item.label} className="bg-af-card rounded-lg px-2.5 py-2 border border-white/[0.06]">
               <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-[10px] text-white/40 uppercase">{item.label}</span>
-                {/* For ALT, show FL badge; otherwise show trend icon */}
+                <span className="font-mono text-[11px] text-white/40 uppercase tracking-wider">{item.label}</span>
                 {'badge' in item && item.badge ? (
-                  <span className="font-mono text-[10px] text-af-cyan/70">{item.badge}</span>
+                  <span className="font-mono text-[11px] text-af-cyan/65 font-semibold">{item.badge}</span>
                 ) : (
                   getDeltaIcon(item.delta)
                 )}
               </div>
               <div className="flex items-baseline gap-1">
-                <span className={`font-mono font-bold text-base ${item.color}`}>
+                <span className={`font-mono font-bold text-[15px] tabular-nums ${item.color}`}>
                   {typeof item.value === 'number' ? item.value.toLocaleString() : item.value}
                 </span>
                 {item.unit && (
-                  <span className="font-mono text-xs text-white/40">{item.unit}</span>
+                  <span className="font-mono text-[11px] text-white/35">{item.unit}</span>
                 )}
               </div>
             </div>
@@ -115,8 +158,8 @@ export function LeftPanel() {
 
       {/* Altitude Profile */}
       <div className="px-4 pb-1">
-        <div className="flex items-center justify-between mb-1">
-          <span className="font-mono text-[10px] text-white/40 uppercase">Altitude Profile</span>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="font-mono text-[10px] text-white/35 uppercase tracking-widest">Altitude Profile</span>
           <span className="font-mono text-[11px] font-bold text-af-cyan">
             FL{flightLevel.toString().padStart(3, '0')}
           </span>
@@ -130,42 +173,58 @@ export function LeftPanel() {
 
       {/* Fuel Burn Rate */}
       <div className="px-4 pb-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="font-mono text-[10px] text-white/40 uppercase">Fuel Burn Rate</span>
-          <span className="font-mono text-[10px] text-af-orange/70">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="font-mono text-[10px] text-white/35 uppercase tracking-widest">Fuel Burn Rate</span>
+          <span className="font-mono text-[11px] text-af-orange/75 tabular-nums">
             {Math.round(fuelState.burn_rate_kg_per_min)} kg/min
           </span>
         </div>
         <Sparkline
           data={fuelRateHistory.length > 1 ? fuelRateHistory : [100, 102, 100, 103, 101]}
           color="#f97316"
-          height={48}
+          height={44}
           showBudgetLine={105}
         />
       </div>
 
       {/* Agent Status */}
       <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <h3 className="font-mono text-[10px] text-white/40 uppercase mb-2">Agent Status</h3>
+        <div className="flex items-center justify-between mb-2">
+          <p className="font-mono text-[10px] text-white/35 uppercase tracking-widest">Agent Status</p>
+          {lastMsg && (
+            <span className={`font-mono text-[10px] ${severityLabel[lastMsg.severity] || 'text-white/30'}`}>
+              {lastMsg.sim_elapsed}
+            </span>
+          )}
+        </div>
         <div className="space-y-2">
           {latestMessages.length === 0 ? (
-            <div className="text-sm text-white/30 italic">No agent activity yet…</div>
+            <div className="bg-af-card rounded-lg border border-white/[0.06] p-3 text-center">
+              <p className="text-[12px] text-white/30 italic">Awaiting agent activity…</p>
+            </div>
           ) : (
             latestMessages.map(msg => (
               <div
                 key={msg.id}
-                className="flex items-start gap-2 bg-af-card rounded-lg p-2 border border-white/[0.06]"
+                className="bg-af-card rounded-lg p-2.5 border border-white/[0.06]"
               >
-                <div
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono border shrink-0 ${agentColors[msg.agent] || 'text-white/50'}`}
-                >
-                  {msg.agent}
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border shrink-0 ${agentColors[msg.agent] || 'text-white/50'}`}>
+                    {msg.agent}
+                  </span>
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${severityDot[msg.severity]}`} />
+                  <span className={`font-mono text-[10px] uppercase tracking-wide ${severityLabel[msg.severity] || 'text-white/30'}`}>
+                    {msg.severity}
+                  </span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-white/70 truncate">{msg.message}</p>
-                  <span className="font-mono text-[10px] text-white/30">{msg.sim_elapsed}</span>
-                </div>
-                <span className={`w-2 h-2 rounded-full shrink-0 mt-1 ${severityDot[msg.severity]}`} />
+                <p className="text-[12px] text-white/80 leading-snug font-sans" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  {msg.message}
+                </p>
+                {msg.finding && msg.finding !== msg.message && (
+                  <p className="mt-1 text-[11px] text-white/45 leading-snug font-mono italic" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {msg.finding}
+                  </p>
+                )}
               </div>
             ))
           )}
