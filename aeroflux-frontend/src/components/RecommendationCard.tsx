@@ -114,6 +114,8 @@ export function RecommendationCard({ recommendation, onAccept, onDismiss }: Reco
           <span>
             {action_type === 'ALTITUDE_CHANGE'
               ? 'Climbing to new flight level…'
+              : action_type === 'SPEED_CHANGE'
+              ? 'Speed adjustment applied…'
               : 'Route deviation applied'}
           </span>
         </div>

@@ -28,6 +28,7 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_MAPBOX_TOKEN=${VITE_MAPBOX_TOKEN}
+        - VITE_BACKEND_URL=${VITE_BACKEND_URL:-http://localhost:8000}
     container_name: aeroflux-frontend
     ports:
       - "80:80"

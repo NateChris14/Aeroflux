@@ -13,6 +13,7 @@ import {
 // ─── Constants ────────────────────────────────────────────────────────────────
 const SIM_MINUTES_PER_TICK = 10; // 10 sim-minutes per wall-clock tick
 const TOTAL_TICKS = 45;          // LHR→DEL at 900 km/h ≈ 7.5 sim-hours
+const HAS_BACKEND = !!import.meta.env.VITE_BACKEND_URL; // suppress mock recs when backend is live
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SimulationState {
@@ -37,14 +38,15 @@ interface SimulationState {
 }
 
 interface SimulationContextType extends SimulationState {
-  startSimulation:      () => void;
-  pauseSimulation:      () => void;
-  resetSimulation:      () => void;
-  setSimSpeed:          (speed: 1 | 2 | 4) => void;
-  acceptRecommendation: (id: string) => void;
-  dismissRecommendation:(id: string) => void;
-  injectEvent:          (eventType: string) => void;
-  addAgentMessage:      (message: Omit<AgentMessage, 'id' | 'timestamp'>) => void;
+  startSimulation:          () => void;
+  pauseSimulation:          () => void;
+  resetSimulation:          () => void;
+  setSimSpeed:              (speed: 1 | 2 | 4) => void;
+  acceptRecommendation:     (id: string) => void;
+  dismissRecommendation:    (id: string) => void;
+  injectEvent:              (eventType: string) => void;
+  addAgentMessage:          (message: Omit<AgentMessage, 'id' | 'timestamp'>) => void;
+  addBackendRecommendation: (rec: Recommendation) => void;
 }
 
 const SimulationContext = createContext<SimulationContextType | undefined>(undefined);
@@ -123,6 +125,18 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
   const simSpeedRef      = useRef<1 | 2 | 4>(1);
   const simulateTickRef  = useRef<() => void>(() => {});
 
+  // Route transition — smooth blend from old position to new route over N ticks
+  const TRANSITION_TICKS            = 8;
+  const routeTransitionFromRef      = useRef<{ lat: number; lng: number } | null>(null);
+  const routeTransitionStartTickRef = useRef<number>(0);
+
+  // Speed override set by accepted SPEED_CHANGE recommendations (null = use tick default)
+  const speedOverrideRef = useRef<number | null>(null);
+
+  // Animation interval refs — cleared on reset so mid-animation resets don't leave ghost intervals
+  const altAnimRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const spdAnimRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Keep activeRoute ref in sync (so tick always reads latest)
   const setActiveRoute = (route: Waypoint[]) => {
     activeRouteRef.current = route;
@@ -161,6 +175,19 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
     const tick  = tickRef.current;
     const route = activeRouteRef.current;
 
+    // Compute route-transition blend factor OUTSIDE setFlightState (refs are safe here)
+    let transitionBlend: { from: { lat: number; lng: number }; t: number } | null = null;
+    if (routeTransitionFromRef.current) {
+      const elapsed = tick - routeTransitionStartTickRef.current;
+      if (elapsed < TRANSITION_TICKS) {
+        const rawT  = elapsed / TRANSITION_TICKS;
+        const eased = rawT < 0.5 ? 2 * rawT * rawT : -1 + (4 - 2 * rawT) * rawT;
+        transitionBlend = { from: routeTransitionFromRef.current, t: eased };
+      } else {
+        routeTransitionFromRef.current = null; // transition complete
+      }
+    }
+
     setTickCount(tick);
     // 10 sim-minutes = 600 sim-seconds per tick
     setSimElapsed(t => t + SIM_MINUTES_PER_TICK * 60);
@@ -179,11 +206,11 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
       let newSpeed  = prev.speed_kts;
 
       if (tick <= 4) {
-        // Climb: 5 000 → 37 000 ft over 4 ticks (9 sim-min per 8 000 ft)
-        newAlt    = Math.min(37000, 5000 + tick * 8000);
+        // Climb: 5,000 → 37,000 ft over 4 ticks; first tick lifts off from ground
+        newAlt    = Math.min(37000, 5000 + (tick - 1) * 8000);
         newPhase  = 'CLIMB';
         newVSpeed = 2200;
-        newSpeed  = Math.min(490, 260 + tick * 57);
+        newSpeed  = Math.min(490, 200 + tick * 72);
       } else if (tick <= 36) {
         // Cruise at ~FL370 with gentle undulation (unless overridden by altitude change)
         if (prev.phase !== 'CLIMB' && prev.phase !== 'DESCENT') {
@@ -191,14 +218,20 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
         }
         if (prev.phase !== 'DEVIATION') newPhase = 'CRUISE';
         newVSpeed = 0;
-        newSpeed  = 490;
-      } else {
+        newSpeed  = speedOverrideRef.current ?? 490;
+      } else if (tick < TOTAL_TICKS) {
         // Descent: 37 000 → ~2 000 ft
         const dt  = tick - 36;
         newAlt    = Math.max(2000, 37000 - dt * 4200);
         newPhase  = 'DESCENT';
         newVSpeed = -1800;
         newSpeed  = Math.max(180, 490 - dt * 38);
+      } else {
+        // Arrived — taxi to gate
+        newAlt    = 0;
+        newPhase  = 'GROUND';
+        newVSpeed = 0;
+        newSpeed  = 0;
       }
 
       // ── Position along route (great-circle SLERP) ──────────────────────────
@@ -210,7 +243,13 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
 
       const cwp = route[wpIdx];
       const nwp = route[Math.min(wpIdx + 1, totalSegs)];
-      const { lat: newLat, lng: newLng } = gcInterpolate(cwp, nwp, segProgress);
+      let { lat: newLat, lng: newLng } = gcInterpolate(cwp, nwp, segProgress);
+
+      // Apply smooth transition blend from old route position to new route position
+      if (transitionBlend) {
+        newLat = transitionBlend.from.lat + (newLat - transitionBlend.from.lat) * transitionBlend.t;
+        newLng = transitionBlend.from.lng + (newLng - transitionBlend.from.lng) * transitionBlend.t;
+      }
 
       // Heading: bearing from current pos → next waypoint
       const dLon   = (nwp.lng - newLng) * Math.PI / 180;
@@ -218,7 +257,9 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
       const lat2R  = nwp.lat * Math.PI / 180;
       const yH     = Math.sin(dLon) * Math.cos(lat2R);
       const xH     = Math.cos(latR) * Math.sin(lat2R) - Math.sin(latR) * Math.cos(lat2R) * Math.cos(dLon);
-      const newHdg = (Math.atan2(yH, xH) * 180 / Math.PI + 360) % 360;
+      const newHdg = newPhase === 'GROUND'
+        ? prev.heading_deg
+        : (Math.atan2(yH, xH) * 180 / Math.PI + 360) % 360;
 
       return {
         ...prev,
@@ -259,14 +300,35 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
     if (tick === 5)  setSigmetActive([MOCK_SIGMET]);
     if (tick === 14) setSigmetActive([]);
 
+    // Dismiss stale recommendations when descent begins
+    if (tick === 37) {
+      speedOverrideRef.current = null;
+      setRecommendations(prev =>
+        prev.map(r => r.status === 'pending' ? { ...r, status: 'dismissed' } : r)
+      );
+      setRecommendedRoute(null);
+    }
+
     // ── Recommendations ───────────────────────────────────────────────────────
-    const rec = MOCK_RECOMMENDATION(tick);
-    if (rec) {
-      setRecommendations(prev => [...prev, rec]);
-      // Show the recommended path overlay before user decides
-      if (rec.action_type === 'ROUTE_CHANGE') {
-        setRecommendedRoute(ALTERNATE_ROUTE);
+    // Only fire mock recommendations when no backend is connected, and only during cruise
+    const isCruise = tick > 4 && tick < 37;
+    if (!HAS_BACKEND && isCruise) {
+      const rec = MOCK_RECOMMENDATION(tick);
+      if (rec) {
+        setRecommendations(prev => [...prev, rec]);
+        if (rec.action_type === 'ROUTE_CHANGE') {
+          setRecommendedRoute(ALTERNATE_ROUTE);
+        }
       }
+    }
+
+    // ── Stop on arrival ───────────────────────────────────────────────────────
+    if (tick >= TOTAL_TICKS) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      setIsRunning(false);
     }
   };
 
@@ -293,7 +355,10 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
 
   const resetSimulation = () => {
     pauseSimulation();
+    if (altAnimRef.current) { clearInterval(altAnimRef.current); altAnimRef.current = null; }
+    if (spdAnimRef.current) { clearInterval(spdAnimRef.current); spdAnimRef.current = null; }
     tickRef.current = 0;
+    speedOverrideRef.current = null;
     setTickCount(0);
     setSimElapsed(0);
     setEta('07:30');
@@ -329,7 +394,9 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
     );
 
     if (rec?.action_type === 'ROUTE_CHANGE') {
-      // Smoothly update the route; aircraft position naturally re-anchors
+      // Capture current position so simulateTick can blend to the new route gradually
+      routeTransitionFromRef.current      = { lat: flightState.lat, lng: flightState.lng };
+      routeTransitionStartTickRef.current = tickRef.current;
       setActiveRoute(ALTERNATE_ROUTE);
       setUsingAlternateRoute(true);
       setRecommendedRoute(null);
@@ -338,12 +405,13 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
 
     if (rec?.action_type === 'ALTITUDE_CHANGE') {
       const targetAlt = rec.action_params.new_altitude_ft as number;
-      const startAlt  = flightState.altitude_ft; // current render value — correct
+      const startAlt  = flightState.altitude_ft;
       const isClimb   = targetAlt > startAlt;
       let step = 0;
       const totalSteps = 60; // 3 s at 50 ms
 
-      const animId = setInterval(() => {
+      if (altAnimRef.current) clearInterval(altAnimRef.current);
+      altAnimRef.current = setInterval(() => {
         step++;
         const t      = Math.min(1, step / totalSteps);
         const eased  = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -355,7 +423,29 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
           phase:             t < 1 ? (isClimb ? 'CLIMB' : 'DESCENT') : 'CRUISE',
         }));
 
-        if (step >= totalSteps) clearInterval(animId);
+        if (step >= totalSteps) { clearInterval(altAnimRef.current!); altAnimRef.current = null; }
+      }, 50);
+    }
+
+    if (rec?.action_type === 'SPEED_CHANGE') {
+      const targetSpeed = (rec.action_params.new_speed_kts as number) || 460;
+      speedOverrideRef.current = targetSpeed;
+      const startSpeed  = flightState.speed_kts;
+      let step = 0;
+      const totalSteps = 40; // 2 s at 50 ms
+
+      if (spdAnimRef.current) clearInterval(spdAnimRef.current);
+      spdAnimRef.current = setInterval(() => {
+        step++;
+        const t     = Math.min(1, step / totalSteps);
+        const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        setFlightState(prev => ({
+          ...prev,
+          speed_kts: Math.round(startSpeed + (targetSpeed - startSpeed) * eased),
+        }));
+
+        if (step >= totalSteps) { clearInterval(spdAnimRef.current!); spdAnimRef.current = null; }
       }, 50);
     }
 
@@ -424,6 +514,33 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
   const addAgentMessage = (msg: Omit<AgentMessage, 'id' | 'timestamp'>) =>
     addAgentMessageInternal(msg);
 
+  const addBackendRecommendation = (rec: Recommendation) => {
+    if (tickRef.current >= 37) return; // descent starts at tick 37; ref is always current
+
+    // Skip if this action would have no observable effect
+    if (rec.action_type === 'ROUTE_CHANGE' && usingAlternateRoute) return;
+    if (rec.action_type === 'ALTITUDE_CHANGE') {
+      const targetAlt = rec.action_params.new_altitude_ft as number;
+      if (!isNaN(targetAlt) && Math.abs(flightState.altitude_ft - targetAlt) < 500) return;
+    }
+    if (rec.action_type === 'SPEED_CHANGE') {
+      const targetSpd = rec.action_params.new_speed_kts as number;
+      const currentSpd = speedOverrideRef.current ?? flightState.speed_kts;
+      if (!isNaN(targetSpd) && Math.abs(currentSpd - targetSpd) < 15) return;
+    }
+
+    setRecommendations(prev => {
+      if (prev.some(r => r.id === rec.id)) return prev;
+      // Don't pile up multiple pending recommendations of the same type
+      if (prev.some(r => r.status === 'pending' && r.action_type === rec.action_type)) return prev;
+      return [...prev, rec];
+    });
+
+    if (rec.action_type === 'ROUTE_CHANGE') {
+      setRecommendedRoute(ALTERNATE_ROUTE);
+    }
+  };
+
   return (
     <SimulationContext.Provider value={{
       flightState,
@@ -452,6 +569,7 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
       dismissRecommendation,
       injectEvent,
       addAgentMessage,
+      addBackendRecommendation,
     }}>
       {children}
     </SimulationContext.Provider>

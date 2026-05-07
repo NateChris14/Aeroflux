@@ -52,7 +52,22 @@ class WeatherAgent(BaseAgent):
                 for p in pireps[:2]
             ])
 
-        prompt = f"""Analyze flight weather. Route: {route_str}. SIGMETs: {sigmet_str}. PIREPs: {pirep_str}. Rule-based turbulence: {rule_data.get('turbulence_severity', 'NONE')}. Respond with JSON: {{"finding": "summary", "severity": "info|warning|critical", "turbulence_severity": "NONE|LIGHT|MODERATE|SEVERE", "reasoning": "brief"}}"""
+        prompt = f"""You are a flight meteorologist. Assess weather on the LHR→DEL route and quantify operational impact.
+
+ROUTE (next 3 WPs): {route_str}
+SIGMETs: {sigmet_str}
+PIREPs: {pirep_str}
+Rule-based turbulence: {rule_data.get('turbulence_severity', 'NONE')}
+
+Consider: MODERATE turbulence requires route deviation (+8min, +400kg fuel). LIGHT turbulence is ride quality only — no divert needed. Clear air turbulence (CAT) is common over the Alps and Caucasus at FL350-FL390.
+
+Respond with JSON only:
+{{
+    "finding": "Weather assessment with fuel/ETA impact (e.g. 'MODERATE CAT over FRA-VIE, divert adds 400kg')",
+    "severity": "info|warning|critical",
+    "turbulence_severity": "NONE|LIGHT|MODERATE|SEVERE",
+    "reasoning": "Brief meteorological reasoning"
+}}"""
 
         response = await self.ollama.generate_json(prompt, temperature=0.2)
 

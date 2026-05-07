@@ -49,32 +49,28 @@ class ComfortAgent(BaseAgent):
             for p in snapshot.pireps[:2]
         ]) if snapshot.pireps else "No PIREPs"
 
-        prompt = f"""You are a passenger comfort expert AI analyzing flight ride quality.
+        prompt = f"""You are a passenger comfort expert AI. Goal: identify turbulence and recommend altitude adjustments to improve ride quality AND save fuel.
 
 FLIGHT STATUS:
-- Altitude: {flight.altitude_ft:.0f}ft
-- Vertical Rate: {flight.vertical_rate_fpm:+.0f}fpm
-- Route Position: WP {flight.current_waypoint_idx}
+- FL{int(flight.altitude_ft/100)}, vertical rate {flight.vertical_rate_fpm:+.0f}fpm, WP index {flight.current_waypoint_idx}
+- Route segments: Alps (WP2), Balkans (WP3), Caucasus/Zagros (WP5) have known orographic turbulence
 
-WEATHER IMPACT:
-SIGMETs:
-{sigmet_str}
+SIGMETs: {sigmet_str}
+PIREPs: {pirep_str}
 
-PIREPs:
-{pirep_str}
-
-RULE-BASED ANALYSIS:
-- Ride Quality: {data.get('ride_quality', 'SMOOTH')}
+RULE-BASED:
+- Ride Quality: {data.get('ride_quality', 'SMOOTH')} (EDR {data.get('edr_estimate', 0):.3f})
 - Comfort Score: {data.get('comfort_score', 100)}/100
-- EDR Estimate: {data.get('edr_estimate', 0)}
-- Affected Segment: {data.get('affected_segment', 'None')}
+- Affected: {data.get('affected_segment', 'None')}
+
+GUIDANCE: LIGHT CHOP (EDR 0.05-0.10) is tolerable but altitude change ±2000ft often finds smoother air. MODERATE (EDR >0.10) warrants altitude change. Note that FL380-FL400 is often above turbulence layer.
 
 Respond with JSON only:
 {{
-    "finding": "Concise passenger comfort assessment",
+    "finding": "Ride quality + specific segment affected",
     "severity": "info|warning|critical",
-    "reasoning": "Brief comfort analysis",
-    "passenger_advice": "What passengers can expect"
+    "reasoning": "Why this turbulence exists at this position",
+    "passenger_advice": "Expected conditions and whether altitude change would help"
 }}"""
 
         response = await self.ollama.generate_json(prompt, temperature=0.2)
@@ -139,6 +135,15 @@ Respond with JSON only:
                     if affected_segment is None and i < len(active_route) - 1:
                         affected_segment = f"{wp.id}-{active_route[i+1].id}"
                     break
+
+        # Add terrain-induced turbulence for known rough segments on LHR→DEL route
+        wp_idx = snapshot.flight_state.current_waypoint_idx
+        terrain_edr = {
+            2: 0.07,  # FRA-VIE: Alps crossing
+            3: 0.06,  # VIE-IST: Balkans orographic
+            5: 0.08,  # TBS-THR: Caucasus/Zagros
+        }.get(wp_idx, 0.0)
+        max_edr = max(max_edr, terrain_edr)
 
         if max_edr < EDR_SMOOTH:
             ride_quality = "SMOOTH"

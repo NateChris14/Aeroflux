@@ -24,6 +24,7 @@ export function Header() {
   }, []);
 
   const phaseColors = {
+    GROUND: 'bg-gray-500',
     CLIMB: 'bg-af-yellow',
     CRUISE: 'bg-af-cyan',
     DESCENT: 'bg-af-orange',

@@ -31,7 +31,7 @@ def fuel_burn_segment(
 
     speed_factor = 1.0 + abs(speed_kts - OPTIMAL_SPEED_KTS) / 100.0 * 0.05
 
-    headwind_penalty = 1.0 + (headwind_kts / 10.0) * HEADWIND_PENALTY_PER_10KT if headwind_kts > 0 else 1.0
+    headwind_penalty = max(0.85, 1.0 + (headwind_kts / 10.0) * HEADWIND_PENALTY_PER_10KT)
 
     base_fuel = BASE_BURN_KG_PER_HOUR * hours
     adjusted_fuel = base_fuel * altitude_factor * speed_factor * headwind_penalty

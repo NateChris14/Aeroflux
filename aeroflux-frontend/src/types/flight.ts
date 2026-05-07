@@ -16,7 +16,7 @@ export interface FlightState {
   current_waypoint_idx: number;
   lat: number;
   lng: number;
-  phase: 'CLIMB' | 'CRUISE' | 'DESCENT' | 'DEVIATION';
+  phase: 'GROUND' | 'CLIMB' | 'CRUISE' | 'DESCENT' | 'DEVIATION';
   vertical_rate_fpm: number;
 }
 

@@ -33,22 +33,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PLANNED_ROUTE = [
-    Waypoint(id="DEL", label="Delhi (VIDP)", lat=28.5562, lng=77.10),
-    Waypoint(id="PETUS", label="PETUS", lat=27.2, lng=75.8),
-    Waypoint(id="VAGAD", label="VAGAD", lat=25.5, lng=74.2),
-    Waypoint(id="OPULA", label="OPULA", lat=23.8, lng=73.0),
-    Waypoint(id="LOVIM", label="LOVIM", lat=22.4, lng=72.1),
-    Waypoint(id="AKTIM", label="AKTIM", lat=21.2, lng=71.3),
-    Waypoint(id="BOM", label="Mumbai (VABB)", lat=19.0896, lng=72.8656),
+    Waypoint(id="LHR", label="London Heathrow",  lat=51.4775, lng=-0.4614),
+    Waypoint(id="AMS", label="Amsterdam",         lat=52.3,    lng= 4.9  ),
+    Waypoint(id="FRA", label="Frankfurt",          lat=50.0,    lng= 8.5  ),
+    Waypoint(id="VIE", label="Vienna",             lat=48.1,    lng=16.6  ),
+    Waypoint(id="IST", label="Istanbul",           lat=41.0,    lng=29.0  ),
+    Waypoint(id="TBS", label="Tbilisi",            lat=41.7,    lng=44.8  ),
+    Waypoint(id="THR", label="Tehran",             lat=35.7,    lng=51.3  ),
+    Waypoint(id="KHI", label="Karachi",            lat=24.9,    lng=67.1  ),
+    Waypoint(id="DEL", label="New Delhi",          lat=28.5562, lng=77.1  ),
 ]
 
 ALTERNATE_ROUTE = [
-    Waypoint(id="DEL", label="Delhi (VIDP)", lat=28.5562, lng=77.10),
-    Waypoint(id="BIKANER", label="BIKANER", lat=28.0, lng=73.3),
-    Waypoint(id="JODHPUR", label="JODHPUR", lat=26.3, lng=73.0),
-    Waypoint(id="UDAIPUR", label="UDAIPUR", lat=24.6, lng=73.7),
-    Waypoint(id="SURAT", label="SURAT", lat=21.2, lng=72.8),
-    Waypoint(id="BOM", label="Mumbai (VABB)", lat=19.0896, lng=72.8656),
+    Waypoint(id="LHR", label="London Heathrow",  lat=51.4775, lng=-0.4614),
+    Waypoint(id="AMS", label="Amsterdam",         lat=52.3,    lng= 4.9  ),
+    Waypoint(id="MUC", label="Munich",            lat=48.3,    lng=11.8  ),
+    Waypoint(id="VCE", label="Venice",            lat=45.5,    lng=12.3  ),
+    Waypoint(id="ATH", label="Athens",            lat=37.9,    lng=23.7  ),
+    Waypoint(id="ANK", label="Ankara",            lat=39.9,    lng=32.9  ),
+    Waypoint(id="THR", label="Tehran",            lat=35.7,    lng=51.3  ),
+    Waypoint(id="KHI", label="Karachi",           lat=24.9,    lng=67.1  ),
+    Waypoint(id="DEL", label="New Delhi",         lat=28.5562, lng=77.1  ),
 ]
 
 app_state: Dict[str, Any] = {
@@ -64,9 +69,9 @@ app_state: Dict[str, Any] = {
     "active_route": PLANNED_ROUTE.copy(),
     "alternate_route": ALTERNATE_ROUTE.copy(),
     "fuel_state": FuelState(
-        remaining_kg=18500.0,
-        burn_rate_kg_per_min=204.0,
-        projected_remaining_at_destination_kg=8500.0,
+        remaining_kg=68500.0,
+        burn_rate_kg_per_min=100.0,
+        projected_remaining_at_destination_kg=12000.0,
         burn_delta_vs_planned_kg=0.0
     ),
     "recommendation_store": {},
@@ -235,7 +240,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(app_state["opensky_service"].poll_forever(5))
         logger.info("Started OpenSky polling (live mode)")
 
-    asyncio.create_task(app_state["aviation_weather_service"].poll_metar(["VIDP", "VABB"], 60))
+    asyncio.create_task(app_state["aviation_weather_service"].poll_metar(["EGLL", "EHAM", "LTBA", "UGTB", "OIII", "OPKR", "VIDP"], 60))
     asyncio.create_task(app_state["aviation_weather_service"].poll_sigmets(60))
     asyncio.create_task(app_state["aviation_weather_service"].poll_pireps(60))
     asyncio.create_task(app_state["open_meteo_service"].poll_waypoints(PLANNED_ROUTE, 3600))
@@ -459,6 +464,18 @@ async def get_routes():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     app_state["websocket_clients"].append(websocket)
+
+    # Replay recent context to the new client so it doesn't wait up to TICK_INTERVAL_S
+    # for the next cycle before seeing any data.
+    try:
+        for msg in list(app_state["message_store"])[-10:]:
+            await websocket.send_json({"type": "agent_message", "data": msg.model_dump()})
+
+        rec = app_state.get("latest_recommendation")
+        if rec and rec.status == "pending":
+            await websocket.send_json({"type": "recommendation", "data": rec.model_dump()})
+    except Exception:
+        pass
 
     try:
         while True:

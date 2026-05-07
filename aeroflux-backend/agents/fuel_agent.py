@@ -43,32 +43,34 @@ class FuelAgent(BaseAgent):
             for wp_id, w in list(wind.items())[:3]
         ]) if wind else "No wind data"
 
-        prompt = f"""You are an aviation fuel optimization expert AI.
+        prompt = f"""You are a fuel optimization expert AI. PRIMARY GOAL: find actions that reduce fuel burn with minimal ETA impact.
 
 FLIGHT STATUS:
-- Altitude: {flight.altitude_ft:.0f}ft (FL{int(flight.altitude_ft/100)})
-- Speed: {flight.speed_kts:.0f}kts
-- Position: Waypoint index {flight.current_waypoint_idx}
+- FL{int(flight.altitude_ft/100)}, {flight.speed_kts:.0f}kts, WP index {flight.current_waypoint_idx}
 
 FUEL STATE:
-- Remaining: {fuel.remaining_kg:.0f}kg
-- Burn Rate: {fuel.burn_rate_kg_per_min:.1f}kg/min
+- Remaining: {fuel.remaining_kg:.0f}kg (burn rate {fuel.burn_rate_kg_per_min:.1f}kg/min)
 - Projected at destination: {rule_data.get('projected_remaining_kg', 0):.0f}kg
+- Optimal reserve target: 12000kg
 
 WIND DATA:
 {wind_str}
 
-RULE-BASED ANALYSIS:
+RULE-BASED:
 - Avg Headwind: {rule_data.get('avg_headwind_kts', 0):.1f}kts
-- Severity: {rule_data.get('severity', 'info')}
 - Finding: {rule_data.get('finding', 'No data')}
+
+OPTIMIZATION GUIDANCE:
+- Headwind > 15kts: recommend climbing to FL380-FL400 where winds are often more favorable (saves ~300-600kg)
+- Speed 490kts in headwind: reducing to 460kts saves ~150kg/hr at cost of ~4min ETA
+- Projected remaining < 15000kg: flag as warning, suggest speed reduction
 
 Respond with JSON only:
 {{
-    "finding": "Concise fuel assessment and recommendation",
+    "finding": "Fuel status + specific optimization opportunity if any",
     "severity": "info|warning|critical",
-    "reasoning": "Brief fuel optimization analysis",
-    "recommendation": "Specific action if needed (e.g., 'Climb to FL380 for better winds')"
+    "reasoning": "Quantified fuel analysis (e.g. '18kt headwind costing ~200kg extra')",
+    "recommendation": "Specific action: altitude, speed, or route change with estimated saving"
 }}"""
 
         response = await self.ollama.generate_json(prompt, temperature=0.2)
@@ -141,7 +143,7 @@ Respond with JSON only:
 
         burn_delta = fuel_state.burn_delta_vs_planned_kg if fuel_state else 0.0
 
-        if avg_headwind > 30:
+        if avg_headwind > 15:
             severity = "warning"
             finding = f"Significant headwind ({avg_headwind:.0f}kts) increasing fuel burn"
         elif projected_remaining < 2000:

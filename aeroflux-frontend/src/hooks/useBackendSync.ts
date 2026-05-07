@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useSimulation } from '../context/SimulationContext';
-import type { AgentMessage } from '../types/flight';
+import type { AgentMessage, Recommendation } from '../types/flight';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || null;
 
@@ -8,68 +8,80 @@ export function useBackendSync() {
   const {
     isRunning,
     addAgentMessage,
+    addBackendRecommendation,
     acceptRecommendation: localAccept,
     dismissRecommendation: localDismiss,
     injectEvent: localInject,
   } = useSimulation();
-  
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Keep latest callbacks in refs so connect() doesn't need them as deps.
+  // Without this, addAgentMessage and addBackendRecommendation change every
+  // render, causing the WebSocket to disconnect and reconnect on every tick.
+  const addAgentMessageRef = useRef(addAgentMessage);
+  const addBackendRecommendationRef = useRef(addBackendRecommendation);
+  addAgentMessageRef.current = addAgentMessage;
+  addBackendRecommendationRef.current = addBackendRecommendation;
+
   const connect = useCallback(() => {
     if (!BACKEND_URL || !isRunning) return;
-    
+
     try {
       const ws = new WebSocket(`${BACKEND_URL.replace(/^http/, 'ws')}/ws/live`);
-      
+
       ws.onopen = () => {
         console.log('[AeroFlux] WebSocket connected');
       };
-      
+
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          
+
           switch (msg.type) {
             case 'snapshot':
-              // Update flight state from backend
               break;
-            case 'recommendation':
-              // Show recommendation from backend
+            case 'recommendation': {
+              const rec = msg.data as Recommendation;
+              if (rec && rec.action_type !== 'NONE' && rec.status === 'pending') {
+                addBackendRecommendationRef.current(rec);
+              }
               break;
-            case 'agent_message':
+            }
+            case 'agent_message': {
               const agentMsg: AgentMessage = {
                 id: msg.data.id || `ws-${Date.now()}`,
                 agent: msg.data.agent,
                 timestamp: Date.now(),
-                sim_elapsed: msg.data.sim_elapsed,
+                sim_elapsed: msg.data.sim_elapsed || 'T+00:00:00',
                 severity: msg.data.severity,
                 message: msg.data.message,
                 finding: msg.data.finding,
               };
-              addAgentMessage(agentMsg);
+              addAgentMessageRef.current(agentMsg);
               break;
+            }
           }
         } catch (err) {
           console.error('[AeroFlux] WebSocket message error:', err);
         }
       };
-      
+
       ws.onclose = () => {
         console.log('[AeroFlux] WebSocket disconnected');
-        // Attempt reconnect
         reconnectTimeoutRef.current = setTimeout(connect, 3000);
       };
-      
+
       ws.onerror = (err) => {
         console.error('[AeroFlux] WebSocket error:', err);
       };
-      
+
       wsRef.current = ws;
     } catch (err) {
       console.error('[AeroFlux] WebSocket connection failed:', err);
     }
-  }, [isRunning, addAgentMessage]);
+  }, [isRunning]); // isRunning only — callbacks use refs to stay stable
 
   useEffect(() => {
     if (BACKEND_URL && isRunning) {
@@ -79,6 +91,7 @@ export function useBackendSync() {
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
+        wsRef.current = null;
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);

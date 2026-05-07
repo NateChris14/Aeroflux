@@ -39,14 +39,14 @@ export const INITIAL_FLIGHT_STATE: FlightState = {
   origin:               'LHR',
   destination:          'DEL',
   aircraft_type:        'Boeing 777-300ER',
-  altitude_ft:          5000,
-  speed_kts:            260,
+  altitude_ft:          0,
+  speed_kts:            0,
   heading_deg:          75,
   current_waypoint_idx: 0,
   lat:                  51.4775,
   lng:                 -0.4614,
-  phase:                'CLIMB',
-  vertical_rate_fpm:    2200,
+  phase:                'GROUND',
+  vertical_rate_fpm:    0,
 };
 
 export const INITIAL_FUEL_STATE: FuelState = {
@@ -61,45 +61,62 @@ export const MOCK_SIGMET: SigmetData = {
   hazard:   'MOD TURB',
   severity: 'MODERATE',
   geometry: {
-    // GeoJSON polygon: [lng, lat]
-    coordinates: [[[20, 47], [27, 47], [27, 50], [20, 50], [20, 47]]],
+    // GeoJSON polygon: [lng, lat] — matches WX-EU-01 irregular bounds
+    coordinates: [[[18,48],[21,46.5],[26,47],[28,49.2],[25,51],[20,50.5],[18,48]]],
   },
 };
 
-// ─── ATC traffic — 10 aircraft along European/Asian corridors ─────────────────
+// ─── ATC traffic — mixed directional traffic along LHR-DEL corridor ──────────
+// Mix of eastbound (LHR→DEL), westbound returns (DEL→LHR), and cross traffic
 export const ATC_TRAFFIC_INITIAL: ATCTraffic[] = [
+  // Eastbound (DEL-bound)
   { callsign: 'BA117', lat: 49.5, lng: 12.0, altitude_fl: 370, speed_kts: 476, heading_deg: 118 },
-  { callsign: 'EK521', lat: 45.8, lng: 22.0, altitude_fl: 380, speed_kts: 488, heading_deg: 112 },
+  { callsign: 'EK521', lat: 44.8, lng: 21.0, altitude_fl: 380, speed_kts: 488, heading_deg: 108 },
   { callsign: 'LH446', lat: 51.2, lng:  6.5, altitude_fl: 350, speed_kts: 472, heading_deg:  88 },
-  { callsign: 'TK073', lat: 43.5, lng: 30.0, altitude_fl: 360, speed_kts: 484, heading_deg:  92 },
-  { callsign: 'AF082', lat: 47.8, lng: 16.0, altitude_fl: 390, speed_kts: 486, heading_deg:  96 },
-  { callsign: 'QR007', lat: 40.2, lng: 42.5, altitude_fl: 370, speed_kts: 492, heading_deg: 108 },
+  { callsign: 'TK073', lat: 43.5, lng: 30.0, altitude_fl: 360, speed_kts: 484, heading_deg:  95 },
   { callsign: 'SV224', lat: 38.5, lng: 48.0, altitude_fl: 360, speed_kts: 476, heading_deg: 116 },
-  { callsign: 'MS766', lat: 35.2, lng: 54.0, altitude_fl: 380, speed_kts: 480, heading_deg: 102 },
-  { callsign: 'PK701', lat: 28.5, lng: 64.5, altitude_fl: 370, speed_kts: 470, heading_deg:  58 },
-  { callsign: 'AI108', lat: 31.8, lng: 70.5, altitude_fl: 350, speed_kts: 474, heading_deg:  52 },
+  { callsign: 'AI108', lat: 33.0, lng: 72.0, altitude_fl: 350, speed_kts: 474, heading_deg:  58 },
+  // Westbound returns (LHR-bound)
+  { callsign: 'AF082', lat: 47.8, lng: 16.0, altitude_fl: 390, speed_kts: 486, heading_deg: 280 },
+  { callsign: 'QR007', lat: 40.2, lng: 42.5, altitude_fl: 370, speed_kts: 492, heading_deg: 272 },
+  { callsign: 'MS766', lat: 35.2, lng: 54.0, altitude_fl: 380, speed_kts: 480, heading_deg: 260 },
+  { callsign: 'EY204', lat: 46.0, lng: 35.5, altitude_fl: 380, speed_kts: 482, heading_deg: 255 },
+  // Cross traffic
+  { callsign: 'PK701', lat: 28.5, lng: 64.5, altitude_fl: 370, speed_kts: 470, heading_deg: 335 },
+  { callsign: 'FZ411', lat: 36.5, lng: 60.0, altitude_fl: 360, speed_kts: 468, heading_deg: 140 },
 ];
 
 // ─── Procedural weather cells along LHR-DEL corridor ─────────────────────────
 // bounds: GeoJSON ring — [lng, lat], last point closes the polygon
+// Cells use irregular convex polygons for a realistic, non-rectangular appearance
 export const WEATHER_CELLS: WeatherCell[] = [
   {
+    // Soft outer halo — wide glow around main EU turbulence zone
+    id: 'WX-EU-HALO',
+    type: 'turbulence',
+    severity: 'moderate',
+    bounds: [[15,45.5],[21,44.2],[30,45.8],[31,51.2],[24,53.0],[17,52.0],[15,45.5]],
+  },
+  {
+    // Core turbulence — directly intersects VIE→IST segment of planned route
     id: 'WX-EU-01',
     type: 'turbulence',
     severity: 'moderate',
-    bounds: [[20, 47], [27, 47], [27, 50], [20, 50], [20, 47]],
+    bounds: [[18,48.0],[21,46.5],[26,47.0],[28,49.2],[25,51.0],[20,50.5],[18,48.0]],
   },
   {
+    // Storm cell over Black Sea
     id: 'WX-BS-01',
     type: 'storm',
     severity: 'severe',
-    bounds: [[30, 42], [36, 42], [36, 45], [30, 45], [30, 42]],
+    bounds: [[30,42.5],[33,41.0],[36,42.0],[37,44.5],[34,46.0],[30,45.0],[30,42.5]],
   },
   {
+    // Turbulence over Iranian plateau
     id: 'WX-IR-01',
     type: 'turbulence',
     severity: 'moderate',
-    bounds: [[48, 33], [55, 33], [55, 36], [48, 36], [48, 33]],
+    bounds: [[47,32.5],[53,31.0],[57,34.0],[55,37.0],[49,36.0],[46,34.0],[47,32.5]],
   },
 ];
 
@@ -143,16 +160,16 @@ export const MOCK_RECOMMENDATION = (tick: number): Recommendation | null => {
       T:           Date.now(),
       sim_elapsed: tick * 600,
       title:       'Route Deviation — Eastern Europe SIGMET',
-      description: 'SIGMET WX-EU-01 (Moderate turbulence) intersects Vienna–Istanbul segment. Southern alternate via Venice–Athens bypasses hazard with 18 min turbulence avoidance.',
+      description: 'SIGMET WX-EU-01 (Moderate turbulence) intersects Vienna–Istanbul segment. Southern alternate captures +22 kt jet stream tailwind, saving fuel and arriving earlier.',
       action_type: 'ROUTE_CHANGE',
-      action_params: { new_route: 'SOUTHERN_ALT', weather_cell: 'WX-EU-01', reason: 'turbulence_avoidance' },
+      action_params: { new_route: 'SOUTHERN_ALT', weather_cell: 'WX-EU-01', reason: 'turbulence_and_wind_optimisation' },
       metrics: {
         turbulence_avoided_min:    18,
-        fuel_impact_kg:            240,
-        eta_impact_min:              4,
+        fuel_impact_kg:          -2800,
+        eta_impact_min:           -28,
         ride_quality_improvement: 'HIGH',
       },
-      confidence:   0.87,
+      confidence:   0.91,
       status:       'pending',
       agent_results: [],
     };

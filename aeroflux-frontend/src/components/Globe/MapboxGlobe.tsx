@@ -137,7 +137,6 @@ export function MapboxGlobe() {
   const {
     flightState,
     activeRoute,
-    alternateRoute,
     recommendedRoute,
     usingAlternateRoute,
     atcTraffic,
@@ -219,10 +218,10 @@ export function MapboxGlobe() {
     if (!m) return;
 
     // Clean previous layers
-    ['active-route-glow', 'active-route', 'alt-route'].forEach(id => {
+    ['active-route-glow', 'active-route'].forEach(id => {
       if (m.getLayer(id))  m.removeLayer(id);
     });
-    ['active-route', 'alt-route'].forEach(id => {
+    ['active-route'].forEach(id => {
       if (m.getSource(id)) m.removeSource(id);
     });
 
@@ -260,27 +259,7 @@ export function MapboxGlobe() {
       },
     });
 
-    // Show alternate reference line when not in use
-    if (alternateRoute.length >= 2 && !usingAlternateRoute) {
-      const altCoords = greatCircleCoords(alternateRoute);
-      m.addSource('alt-route', {
-        type: 'geojson',
-        data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: altCoords } },
-      });
-      m.addLayer({
-        id: 'alt-route',
-        type: 'line',
-        source: 'alt-route',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color':     '#f97316',
-          'line-width':     1.5,
-          'line-opacity':   0.22,
-          'line-dasharray': [3, 4],
-        },
-      });
-    }
-  }, [activeRoute, alternateRoute, usingAlternateRoute]);
+  }, [activeRoute, usingAlternateRoute]);
 
   useEffect(() => {
     if (!map.current) return;
@@ -357,12 +336,12 @@ export function MapboxGlobe() {
 
     const drawWeather = () => {
       WEATHER_CELLS.forEach(cell => {
-        const fillId   = `wx-fill-${cell.id}`;
-        const borderId = `wx-border-${cell.id}`;
+        const fillId    = `wx-fill-${cell.id}`;
+        const coreId    = `wx-core-${cell.id}`;
+        const borderId  = `wx-border-${cell.id}`;
 
-        // Clean if already exists
-        if (m.getLayer(fillId))   m.removeLayer(fillId);
-        if (m.getLayer(borderId)) m.removeLayer(borderId);
+        // Clean existing layers/sources
+        [fillId, coreId, borderId].forEach(id => { if (m.getLayer(id)) m.removeLayer(id); });
         if (m.getSource(cell.id)) m.removeSource(cell.id);
 
         m.addSource(cell.id, {
@@ -374,27 +353,47 @@ export function MapboxGlobe() {
           },
         });
 
-        const baseColor = cell.type === 'storm' ? '#ef4444' : '#f97316';
+        const isLight = cell.id.endsWith('-HALO');
+        const isStorm = cell.type === 'storm';
+        const baseColor = isStorm ? '#ef4444' : '#f97316';
 
+        // Outer fill — soft ambient glow
         m.addLayer({
           id:     fillId,
           type:   'fill',
           source: cell.id,
           paint: {
             'fill-color':   baseColor,
-            'fill-opacity': cell.type === 'storm' ? 0.3 : 0.2,
+            'fill-opacity': isLight ? 0.07 : isStorm ? 0.28 : 0.16,
           },
           layout: { visibility: showWeather ? 'visible' : 'none' },
         });
 
+        // Inner core fill (denser center) — skip for halo cells
+        if (!isLight) {
+          m.addLayer({
+            id:     coreId,
+            type:   'fill',
+            source: cell.id,
+            paint: {
+              'fill-color':   baseColor,
+              'fill-opacity': isStorm ? 0.14 : 0.08,
+            },
+            layout: { visibility: showWeather ? 'visible' : 'none' },
+          });
+        }
+
+        // Border — dashed for storms, solid for turbulence
         m.addLayer({
           id:     borderId,
           type:   'line',
           source: cell.id,
           paint: {
-            'line-color':   baseColor,
-            'line-width':   1.5,
-            'line-opacity': 0.65,
+            'line-color':        baseColor,
+            'line-width':        isLight ? 0.5 : isStorm ? 1.8 : 1.2,
+            'line-opacity':      isLight ? 0.25 : isStorm ? 0.85 : 0.55,
+            'line-blur':         isLight ? 2 : 1,
+            ...(isStorm ? { 'line-dasharray': [3, 2] } : {}),
           },
           layout: { visibility: showWeather ? 'visible' : 'none' },
         });
@@ -426,8 +425,12 @@ export function MapboxGlobe() {
       return drawWeather();
     } else {
       let cleanup: (() => void) | undefined;
-      m.once('styledata', () => { cleanup = drawWeather(); });
-      return () => cleanup?.();
+      const onStyleData = () => { cleanup = drawWeather(); };
+      m.once('styledata', onStyleData);
+      return () => {
+        m.off('styledata', onStyleData);
+        cleanup?.();
+      };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -437,7 +440,7 @@ export function MapboxGlobe() {
     const m = map.current;
     if (!m || !m.isStyleLoaded()) return;
     WEATHER_CELLS.forEach(cell => {
-      ['fill', 'border'].forEach(part => {
+      ['fill', 'core', 'border'].forEach(part => {
         const id = `wx-${part}-${cell.id}`;
         if (m.getLayer(id)) {
           m.setLayoutProperty(id, 'visibility', showWeather ? 'visible' : 'none');

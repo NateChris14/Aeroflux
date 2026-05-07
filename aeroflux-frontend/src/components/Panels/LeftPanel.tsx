@@ -17,33 +17,35 @@ export function LeftPanel() {
   const destination = activeRoute[activeRoute.length - 1];
   const flightLevel = Math.floor(flightState.altitude_ft / 100);
 
+  const isGround = flightState.phase === 'GROUND';
+
   const telemetry = [
     {
       label: 'ALT',
-      value: flightState.altitude_ft,
+      value: isGround ? 0 : flightState.altitude_ft,
       unit: 'ft',
       color: 'text-af-cyan',
       delta: flightState.vertical_rate_fpm,
-      badge: `FL${flightLevel.toString().padStart(3, '0')}`,
+      badge: isGround ? 'GND' : `FL${flightLevel.toString().padStart(3, '0')}`,
     },
-    { label: 'SPD',  value: flightState.speed_kts,                       unit: 'kts', color: 'text-white',     delta: 0 },
-    { label: 'HDG',  value: Math.round(flightState.heading_deg),          unit: '°',   color: 'text-white',     delta: 0 },
+    { label: 'SPD',  value: isGround ? 0 : flightState.speed_kts,          unit: 'kts', color: 'text-white',     delta: 0 },
+    { label: 'HDG',  value: Math.round(flightState.heading_deg),            unit: '°',   color: 'text-white',     delta: 0 },
     {
       label: 'FUEL',
       value: Math.round(fuelState.remaining_kg),
       unit: 'kg',
       color: fuelState.remaining_kg < 15000 ? 'text-af-red' : 'text-af-orange',
-      delta: -Math.round(fuelState.burn_rate_kg_per_min),
+      delta: isGround ? 0 : -Math.round(fuelState.burn_rate_kg_per_min),
     },
-    { label: 'ETA',  value: eta,                                           unit: '',    color: 'text-white',     delta: 0 },
+    { label: 'ETA',  value: eta,                                            unit: '',    color: 'text-white',     delta: 0 },
     {
       label: 'RIDE',
-      value: flightState.phase === 'CRUISE'    ? 'SMOOTH'
-           : flightState.phase === 'DEVIATION' ? 'MODERATE'
-           : flightState.phase === 'CLIMB'     ? 'LIGHT'
+      value: isGround                              ? 'N/A'
+           : flightState.phase === 'CRUISE'        ? 'SMOOTH'
+           : flightState.phase === 'DEVIATION'     ? 'MODERATE'
            : 'LIGHT',
       unit: '',
-      color: flightState.phase === 'CRUISE' ? 'text-af-green' : 'text-af-yellow',
+      color: isGround ? 'text-white/30' : flightState.phase === 'CRUISE' ? 'text-af-green' : 'text-af-yellow',
       delta: 0,
     },
   ] as const;
@@ -80,12 +82,14 @@ export function LeftPanel() {
   const hasActivity = agentMessages.length > 0;
 
   const phaseLabel: Record<string, string> = {
+    GROUND:    'PRE-FLT',
     CLIMB:     'CLIMB',
     CRUISE:    'CRUISE',
     DESCENT:   'DESCENT',
     DEVIATION: 'DIVERT',
   };
   const phaseColor: Record<string, string> = {
+    GROUND:    'text-white/45  bg-white/5      border-white/15',
     CLIMB:     'text-af-green  bg-af-green/10  border-af-green/30',
     CRUISE:    'text-af-cyan   bg-af-cyan/10   border-af-cyan/30',
     DESCENT:   'text-af-yellow bg-af-yellow/10 border-af-yellow/30',

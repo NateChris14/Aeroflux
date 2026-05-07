@@ -215,25 +215,27 @@ class FlightSimulator:
         self.tick_count = 0
 
         self.waypoints = [
-            {"id": "DEL", "label": "Delhi (VIDP)", "lat": 28.5562, "lng": 77.10},
-            {"id": "PETUS", "label": "PETUS", "lat": 27.2, "lng": 75.8},
-            {"id": "VAGAD", "label": "VAGAD", "lat": 25.5, "lng": 74.2},
-            {"id": "OPULA", "label": "OPULA", "lat": 23.8, "lng": 73.0},
-            {"id": "LOVIM", "label": "LOVIM", "lat": 22.4, "lng": 72.1},
-            {"id": "AKTIM", "label": "AKTIM", "lat": 21.2, "lng": 71.3},
-            {"id": "BOM", "label": "Mumbai (VABB)", "lat": 19.0896, "lng": 72.8656},
+            {"id": "LHR", "label": "London Heathrow", "lat": 51.4775, "lng": -0.4614},
+            {"id": "AMS", "label": "Amsterdam",        "lat": 52.3,    "lng":  4.9   },
+            {"id": "FRA", "label": "Frankfurt",         "lat": 50.0,    "lng":  8.5   },
+            {"id": "VIE", "label": "Vienna",            "lat": 48.1,    "lng": 16.6   },
+            {"id": "IST", "label": "Istanbul",          "lat": 41.0,    "lng": 29.0   },
+            {"id": "TBS", "label": "Tbilisi",           "lat": 41.7,    "lng": 44.8   },
+            {"id": "THR", "label": "Tehran",            "lat": 35.7,    "lng": 51.3   },
+            {"id": "KHI", "label": "Karachi",           "lat": 24.9,    "lng": 67.1   },
+            {"id": "DEL", "label": "New Delhi",         "lat": 28.5562, "lng": 77.1   },
         ]
 
-        self.fuel_kg = 18500.0
-        self.callsign = "AIC101"
-        self.icao24 = "8003c2"
+        self.fuel_kg = 68500.0
+        self.callsign = "BA008"
+        self.icao24 = "400943"
 
     async def simulate_tick(self):
         self.tick_count += 1
         T = self.clock.T
 
-        # Slower progression: 12 ticks per waypoint (4 minutes at 20s ticks)
-        ticks_per_wp = 12
+        # 9 waypoints × 5 ticks each = 45 ticks total (matches frontend profile)
+        ticks_per_wp = 5
         wp_idx = min(self.tick_count // ticks_per_wp, len(self.waypoints) - 1)
         next_wp_idx = min(wp_idx + 1, len(self.waypoints) - 1)
 
@@ -244,24 +246,22 @@ class FlightSimulator:
         lat = wp["lat"] + (next_wp["lat"] - wp["lat"]) * progress
         lng = wp["lng"] + (next_wp["lng"] - wp["lng"]) * progress
 
-        # Extended altitude profile for slower flight
-        if self.tick_count < 6:  # Initial climb to FL280
-            altitude_ft = 0 + (28000 - 0) * (self.tick_count / 6)
+        # Match frontend phase profile (ticks 1-4 CLIMB, 5-36 CRUISE, 37-44 DESCENT, 45+ GROUND)
+        if self.tick_count <= 4:
+            altitude_ft = min(37000, 5000 + (self.tick_count - 1) * 8000)
             phase = "CLIMB"
-        elif self.tick_count < 12:  # Climb to FL360
-            altitude_ft = 28000 + (36000 - 28000) * ((self.tick_count - 6) / 6)
-            phase = "CLIMB"
-        elif self.tick_count < 60:  # Extended cruise (48 ticks = ~16 minutes)
-            altitude_ft = 36000
+        elif self.tick_count <= 36:
+            altitude_ft = 37000
             phase = "CRUISE"
-        elif self.tick_count < 72:  # Gradual descent
-            altitude_ft = max(15000, 36000 - (self.tick_count - 60) * 1750)
+        elif self.tick_count <= 44:
+            dt = self.tick_count - 36
+            altitude_ft = max(2000, 37000 - dt * 4200)
             phase = "DESCENT"
-        else:  # Final approach
-            altitude_ft = max(0, 15000 - (self.tick_count - 72) * 2500)
-            phase = "APPROACH" if altitude_ft > 500 else "LANDED"
+        else:
+            altitude_ft = 0
+            phase = "GROUND"
 
-        speed_kts = 420 + ((self.tick_count * 7) % 40)
+        speed_kts = 490 if phase == "CRUISE" else (350 if phase == "CLIMB" else 200)
         heading = self._bearing(lat, lng, next_wp["lat"], next_wp["lng"])
 
         burn = self._fuel_burn(altitude_ft, speed_kts)
@@ -294,7 +294,7 @@ class FlightSimulator:
         return (math.degrees(math.atan2(x, y)) + 360) % 360
 
     def _fuel_burn(self, altitude_ft, speed_kts):
-        base_burn = 2450 / 12
+        base_burn = 1255.0  # kg/tick, B777-300ER LHR→DEL over 45 ticks
         alt_factor = 0.95 if 35000 <= altitude_ft <= 39000 else 1.0
         return base_burn * alt_factor
 

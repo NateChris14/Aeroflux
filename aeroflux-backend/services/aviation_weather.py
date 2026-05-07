@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 import httpx
 from core.data_cache import DataCache
 
@@ -92,7 +93,9 @@ class AviationWeatherService:
         while True:
             try:
                 client = await self._get_client()
-                url = f"{BASE_URL}/pirep?format=json&hours=2"
+                # bbox covers LHR→DEL corridor; age=2 fetches last 2 hours of reports
+                # New AWC API requires bbox or id — bare ?hours= is no longer valid
+                url = f"{BASE_URL}/pirep?bbox=10,-10,60,90&age=2&format=json"
 
                 response = await client.get(url, timeout=15.0)
                 response.raise_for_status()
@@ -100,17 +103,20 @@ class AviationWeatherService:
 
                 pireps = []
                 for item in data if isinstance(data, list) else []:
+                    # New AWC field names first, old names as fallback
                     pirep = {
-                        "id": item.get("reportId", "unknown"),
-                        "latitude": item.get("latitude"),
-                        "longitude": item.get("longitude"),
-                        "altitude": item.get("altitude"),
-                        "aircraft_type": item.get("aircraftType", ""),
-                        "turbulence_intensity": item.get("turbulenceIntensity", ""),
-                        "turbulence_type": item.get("turbulenceType", ""),
-                        "icing_intensity": item.get("icingIntensity", ""),
-                        "report": item.get("report", ""),
-                        "timestamp": self._iso_to_timestamp(item.get("reportTime", ""))
+                        "id":                   item.get("pirepId")           or item.get("reportId", "unknown"),
+                        "latitude":             item.get("lat")               or item.get("latitude"),
+                        "longitude":            item.get("lon")               or item.get("longitude"),
+                        "altitude":             item.get("fltLvl")            or item.get("altitude"),
+                        "aircraft_type":        item.get("acType")            or item.get("aircraftType", ""),
+                        "turbulence_intensity": item.get("tbInt1")            or item.get("turbulenceIntensity", ""),
+                        "turbulence_type":      item.get("tbType1")           or item.get("turbulenceType", ""),
+                        "icing_intensity":      item.get("icgInt1")           or item.get("icingIntensity", ""),
+                        "report":               item.get("rawOb")             or item.get("report", ""),
+                        "timestamp":            self._iso_to_timestamp(
+                                                    item.get("obsTime") or item.get("reportTime", "")
+                                                ),
                     }
                     pireps.append(pirep)
 
@@ -121,6 +127,3 @@ class AviationWeatherService:
                 logger.warning(f"PIREP poll error: {e}")
 
             await asyncio.sleep(interval_s)
-
-
-from typing import Optional

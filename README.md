@@ -18,6 +18,12 @@ AeroFlux AI simulates a next-generation Flight Operations Center, integrating mu
 - **Multi-Agent AI Architecture**: Specialized agents for weather, fuel, ATC, comfort, and supervisory control
 - **Real-time Flight Tracking**: Live aircraft position updates via OpenSky Network
 - **Interactive 3D Globe**: Mapbox GL JS-powered visualization with aircraft markers and route overlays
+- **LHR → DEL Great-Circle Route**: Realistic 3,616 NM London Heathrow to New Delhi flight (BA008) with 9 waypoints
+- **ATC Traffic Layer**: 10 secondary aircraft markers with data tags and proximity alerts (<150 km pulsing ring)
+- **Live Weather Overlays**: 3 animated weather cell polygons with slow eastward drift; SIGMET over Eastern Europe (VIE–IST corridor)
+- **Amber Route Overlay**: Recommended route shown as dashed amber arc before pilot accepts a route change
+- **Altitude Animation**: Smooth cubic ease-in-out altitude transition over 3 seconds on ALTITUDE_CHANGE accept
+- **ETA Countdown**: Dynamic estimated time of arrival updated every simulation tick
 - **LLM-Powered Intelligence**: Supports Ollama (local), Groq, and OpenAI for agent reasoning
 - **WebSocket Communication**: Real-time data streaming between backend and frontend
 - **Docker Orchestration**: Complete containerized deployment with docker-compose
@@ -224,30 +230,36 @@ npm run dev
 
 ## Flight Simulation
 
-### Delhi-Mumbai Route (VIDP→VABB)
+### London Heathrow → New Delhi (LHR → DEL)
 
-The default simulation follows a realistic commercial flight path:
+The default simulation follows a realistic 3,616 NM great-circle commercial flight path (callsign **BA008**, Boeing 777-300ER):
 
-| Phase | Duration | Altitude Profile |
-|-------|----------|------------------|
-| Climb | 4 min | 0 → FL280 → FL360 |
-| Cruise | 16 min | FL360 |
-| Descent | 4 min | FL360 → 15,000ft |
-| Approach | 2 min | 15,000ft → touchdown |
+| Phase | Sim Duration | Altitude Profile |
+|-------|-------------|------------------|
+| Ground | — | 0 ft |
+| Climb | ~30 sim-min | 0 → FL360 |
+| Cruise | ~6 sim-hours | FL360 |
+| Descent | ~30 sim-min | FL360 → 15,000 ft |
+| Approach | ~15 sim-min | 15,000 ft → touchdown |
 
-**Waypoints**: DEL → PETUS → VAGAD → OPULA → LOVIM → AKTIM → BOM
+Simulation runs at **10 sim-minutes per tick** (45 ticks = 7.5 sim-hours), with selectable speed multipliers (1×, 2×, 4×).
 
-**Alternate Route**: Available for diversion scenarios (BIKANER → JODHPUR → UDAIPUR)
+**Planned Route**: LHR → AMS → FRA → VIE → IST → TBS → THR → KHI → DEL
+
+**Alternate Route** (southern, avoids Eastern Europe SIGMET): LHR → AMS → MUC → VCE → ATH → ANK → THR → KHI → DEL
+
+**SIGMET**: Active severe turbulence zone over Eastern Europe (VIE–IST corridor)
 
 ### Live Tracking Mode
 
-Switch to live aircraft tracking:
+Switch to live aircraft tracking by overriding environment variables:
 
 ```bash
-# docker-compose.yml
+# docker-compose.override.yml
 environment:
   - OPENSKY_MODE=live
-  - OPENSKY_ICAO24=auto  # Auto-discover or specify ICAO24
+  - OPENSKY_ICAO24=auto        # auto-discover or set a specific ICAO24 hex
+  - LLM_PROVIDER=ollama        # override file switches to Ollama
 ```
 
 ## Technologies
@@ -261,7 +273,10 @@ environment:
 **Frontend**
 - [React 18](https://react.dev/) - UI library with hooks and context
 - [TypeScript](https://www.typescriptlang.org/) - Type-safe JavaScript
-- [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/) - Interactive maps and 3D globe
+- [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/) - Interactive maps, 3D globe, and weather polygons
+- [Three.js / react-three-fiber](https://docs.pmnd.rs/react-three-fiber/) - 3D rendering
+- [Recharts](https://recharts.org/) - Altitude and fuel history charts
+- [Framer Motion](https://www.framer.com/motion/) - Smooth UI animations
 - [Tailwind CSS](https://tailwindcss.com/) - Utility-first styling
 - [Vite](https://vitejs.dev/) - Fast build tooling
 

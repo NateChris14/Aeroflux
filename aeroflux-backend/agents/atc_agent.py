@@ -9,9 +9,9 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 ATC_CONSTRAINTS = [
-    {"type": "ALTITUDE_BLOCK", "fl_min": 220, "fl_max": 280, "valid_ticks": [7, 12], "description": "Altitude block FL220-FL280 active"},
-    {"type": "SPEED_RESTRICTION", "max_kts": 440, "valid_ticks": [14, 16], "description": "Speed restriction max 440kts due to traffic"},
-    {"type": "HOLD", "waypoint": "AKTIM", "valid_ticks": [20, 22], "description": "HOLD at AKTIM, expect 2 tick delay"},
+    {"type": "ALTITUDE_BLOCK", "fl_min": 350, "fl_max": 390, "valid_ticks": [10, 16], "description": "Altitude block FL350-FL390 active over European airspace"},
+    {"type": "SPEED_RESTRICTION", "max_kts": 440, "valid_ticks": [20, 23], "description": "Speed restriction max 440kts due to traffic over Turkey"},
+    {"type": "HOLD", "waypoint": "AKTIM", "valid_ticks": [25, 27], "description": "HOLD at AKTIM, expect 2 tick delay"},
 ]
 
 
@@ -45,29 +45,27 @@ class ATCAgent(BaseAgent):
             for c in constraints
         ]) if constraints else "No active constraints"
 
-        prompt = f"""You are an Air Traffic Control expert AI analyzing flight constraints.
+        prompt = f"""You are an Air Traffic Control expert AI. Goal: ensure compliance AND find efficient routing opportunities.
 
 FLIGHT STATUS:
-- Callsign: {flight.callsign}
-- Current FL: {int(flight.altitude_ft/100)}
-- Speed: {flight.speed_kts:.0f}kts
-- Tick Count: {snapshot.tick_count}
+- {flight.callsign} at FL{int(flight.altitude_ft/100)}, {flight.speed_kts:.0f}kts, tick {snapshot.tick_count}
 
 ACTIVE CONSTRAINTS:
 {constraints_str}
 
-RULE-BASED ANALYSIS:
-- Severity: {rule_data.get('severity', 'info')}
-- Finding: {rule_data.get('finding', 'No data')}
+RULE-BASED:
 - Altitude Blocked: {rule_data.get('altitude_blocked', False)}
 - Available Corridors: {rule_data.get('available_corridors', [])}
+- Finding: {rule_data.get('finding', 'No data')}
+
+Consider: If altitude is blocked, identify the most fuel-efficient available corridor. FL380-FL400 typically gives better winds than FL350. Even if no constraints are active, flag if a step-climb clearance to FL380+ would be beneficial.
 
 Respond with JSON only:
 {{
-    "finding": "Concise ATC assessment",
+    "finding": "ATC status + efficiency opportunity if any",
     "severity": "info|warning|critical",
-    "reasoning": "ATC reasoning",
-    "clearance_recommendation": "Suggested pilot action if any"
+    "reasoning": "ATC and efficiency reasoning",
+    "clearance_recommendation": "Specific FL and reason (e.g., 'Request FL390 for tailwind advantage')"
 }}"""
 
         response = await self.ollama.generate_json(prompt, temperature=0.2)

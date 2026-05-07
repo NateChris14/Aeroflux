@@ -26,7 +26,7 @@ function routeDistanceNm(route: Waypoint[]): number {
 }
 
 export function RightPanel() {
-  const { recommendations, decisions, usingAlternateRoute, eta, fuelState, flightState, agentMessages } = useSimulation();
+  const { recommendations, decisions, usingAlternateRoute, eta, fuelState, flightState, agentMessages, tickCount } = useSimulation();
   const { acceptRecommendation, dismissRecommendation } = useBackendSync();
 
   const pendingRecs = recommendations.filter(r => r.status === 'pending');
@@ -34,19 +34,34 @@ export function RightPanel() {
 
   const fuelRemaining = Math.round(fuelState.remaining_kg).toLocaleString();
 
-  // Compute route distances dynamically
-  const plannedNm   = useMemo(() => routeDistanceNm(PLANNED_ROUTE), []);
-  const alternateNm = useMemo(() => routeDistanceNm(ALTERNATE_ROUTE), []);
+  // Total route distances (static reference)
+  const plannedTotalNm   = useMemo(() => routeDistanceNm(PLANNED_ROUTE),   []);
+  const alternateTotalNm = useMemo(() => routeDistanceNm(ALTERNATE_ROUTE), []);
 
-  // Estimate fuel: kg/NM from current burn rate and speed
-  const speedKts = flightState.speed_kts || 490;
-  const fuelKgPerNm = fuelState.burn_rate_kg_per_min / (speedKts / 60);
-  const plannedFuelKg  = Math.round(plannedNm  * fuelKgPerNm);
-  const alternateFuelKg = Math.round(alternateNm * fuelKgPerNm);
+  // Wind component: planned route faces headwind through Eastern Europe jet stream band;
+  // alternate route (southern path) captures tailwind from the subtropical jet
+  const PLANNED_WIND_KTS   = -32; // headwind penalty on planned route
+  const ALTERNATE_WIND_KTS = +22; // tailwind benefit on alternate southern path
 
-  // ETA difference in minutes based on distance delta at cruise speed
-  const distDeltaNm   = alternateNm - plannedNm;
-  const etaDeltaMin   = Math.round((distDeltaNm / speedKts) * 60);
+  // Remaining distances shrink tick-by-tick so the panel stays live
+  const progress             = Math.min(1, tickCount / 45);
+  const plannedRemainingNm   = Math.round(plannedTotalNm   * (1 - progress));
+  const alternateRemainingNm = Math.round(alternateTotalNm * (1 - progress));
+
+  const baseSpeed         = Math.max(300, flightState.speed_kts || 490);
+  const plannedEffSpeed   = Math.max(300, baseSpeed + PLANNED_WIND_KTS);
+  const alternateEffSpeed = Math.max(300, baseSpeed + ALTERNATE_WIND_KTS);
+  const burnRate          = fuelState.burn_rate_kg_per_min || 100;
+
+  // Remaining fuel needed for each route from current position
+  const plannedRemainingFuelKg   = Math.round((plannedRemainingNm   / plannedEffSpeed) * 60 * burnRate);
+  const alternateRemainingFuelKg = Math.round((alternateRemainingNm / alternateEffSpeed) * 60 * burnRate);
+  const fuelSavingsKg            = Math.max(0, plannedRemainingFuelKg - alternateRemainingFuelKg);
+
+  // Negative = alternate arrives earlier (based on remaining distances)
+  const etaDeltaMin = Math.round(
+    ((alternateRemainingNm / alternateEffSpeed) - (plannedRemainingNm / plannedEffSpeed)) * 60
+  );
 
   // Turbulence risk from last WEATHER agent message
   const lastWeatherMsg = [...agentMessages].reverse().find(m => m.agent === 'WEATHER');
@@ -120,17 +135,20 @@ export function RightPanel() {
               ? 'bg-af-card border-af-cyan/25'
               : 'bg-af-card/40 border-white/[0.04] opacity-55'
           }`}>
-            <h4 className="text-[11px] font-semibold font-mono text-white/65 mb-2.5 tracking-wide">
-              {usingAlternateRoute ? 'ORIG. ROUTE' : '✓ ACTIVE'}
-            </h4>
+            <div className="flex items-center justify-between mb-2.5">
+              <h4 className="text-[11px] font-semibold font-mono text-white/65 tracking-wide">
+                {usingAlternateRoute ? 'ORIG. ROUTE' : '✓ ACTIVE'}
+              </h4>
+              <span className="font-mono text-[10px] text-af-red/70 bg-af-red/8 px-1 rounded">HW 32kt</span>
+            </div>
             <div className="space-y-2">
               <div className="flex justify-between items-baseline">
-                <span className="text-[10px] text-white/40 font-mono">DIST</span>
-                <span className="text-[12px] text-white font-mono tabular-nums font-semibold">{plannedNm.toLocaleString()} NM</span>
+                <span className="text-[10px] text-white/40 font-mono">REM</span>
+                <span className="text-[12px] text-white font-mono tabular-nums font-semibold">{plannedRemainingNm.toLocaleString()} NM</span>
               </div>
               <div className="flex justify-between items-baseline">
                 <span className="text-[10px] text-white/40 font-mono">FUEL</span>
-                <span className="text-[12px] text-white font-mono tabular-nums font-semibold">{plannedFuelKg.toLocaleString()} kg</span>
+                <span className="text-[12px] text-af-red font-mono tabular-nums font-semibold">{plannedRemainingFuelKg.toLocaleString()} kg</span>
               </div>
               <div className="flex justify-between items-baseline">
                 <span className="text-[10px] text-white/40 font-mono">ETA</span>
@@ -151,21 +169,24 @@ export function RightPanel() {
               ? 'bg-af-yellow/5 border-af-yellow/25'
               : 'bg-af-card border-white/[0.06]'
           }`}>
-            <h4 className="text-[11px] font-semibold font-mono text-white/65 mb-2.5 tracking-wide">
-              {usingAlternateRoute ? '✓ ACTIVE' : 'ALT SOUTH'}
-            </h4>
+            <div className="flex items-center justify-between mb-2.5">
+              <h4 className="text-[11px] font-semibold font-mono text-white/65 tracking-wide">
+                {usingAlternateRoute ? '✓ ACTIVE' : 'ALT SOUTH'}
+              </h4>
+              <span className="font-mono text-[10px] text-af-green/70 bg-af-green/8 px-1 rounded">TW 22kt</span>
+            </div>
             <div className="space-y-2">
               <div className="flex justify-between items-baseline">
-                <span className="text-[10px] text-white/40 font-mono">DIST</span>
-                <span className="text-[12px] text-white font-mono tabular-nums font-semibold">{alternateNm.toLocaleString()} NM</span>
+                <span className="text-[10px] text-white/40 font-mono">REM</span>
+                <span className="text-[12px] text-white font-mono tabular-nums font-semibold">{alternateRemainingNm.toLocaleString()} NM</span>
               </div>
               <div className="flex justify-between items-baseline">
                 <span className="text-[10px] text-white/40 font-mono">FUEL</span>
-                <span className="text-[12px] text-white font-mono tabular-nums font-semibold">{alternateFuelKg.toLocaleString()} kg</span>
+                <span className="text-[12px] text-af-green font-mono tabular-nums font-semibold">{alternateRemainingFuelKg.toLocaleString()} kg</span>
               </div>
               <div className="flex justify-between items-baseline">
                 <span className="text-[10px] text-white/40 font-mono">ETA</span>
-                <span className={`text-[12px] font-mono tabular-nums font-semibold ${usingAlternateRoute ? 'text-white' : 'text-af-yellow'}`}>
+                <span className={`text-[12px] font-mono tabular-nums font-semibold ${etaDeltaMin < 0 ? 'text-af-green' : usingAlternateRoute ? 'text-white' : 'text-af-yellow'}`}>
                   {etaDeltaMin >= 0 ? '+' : ''}{etaDeltaMin} min
                 </span>
               </div>
@@ -176,6 +197,24 @@ export function RightPanel() {
             </div>
           </div>
         </div>
+
+        {/* Live fuel-savings banner */}
+        {fuelSavingsKg > 0 && (
+          <div className={`mt-2 p-2 rounded-lg border flex items-center justify-between ${
+            usingAlternateRoute
+              ? 'bg-af-green/10 border-af-green/20'
+              : 'bg-af-yellow/8 border-af-yellow/15'
+          }`}>
+            <span className="font-mono text-[10px] text-white/40 uppercase tracking-widest">
+              {usingAlternateRoute ? 'Saving' : 'Potential saving'}
+            </span>
+            <span className={`font-mono text-[12px] font-semibold tabular-nums ${
+              usingAlternateRoute ? 'text-af-green' : 'text-af-yellow'
+            }`}>
+              ~{fuelSavingsKg.toLocaleString()} kg
+            </span>
+          </div>
+        )}
 
         {/* Fuel remaining indicator */}
         <div className="mt-3 bg-af-card rounded-lg border border-white/[0.06] p-3">
