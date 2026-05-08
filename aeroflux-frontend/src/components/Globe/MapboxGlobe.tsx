@@ -483,19 +483,19 @@ export function MapboxGlobe() {
       altBadgeEl.current = el;
       el.innerHTML = `
         <div style="
-          background: rgba(5,10,20,0.92);
-          border: 1px solid rgba(6,182,212,0.55);
-          border-radius: 8px;
-          padding: 5px 12px;
+          background: rgba(4,11,22,0.95);
+          border: 1px solid rgba(14,165,233,0.35);
+          border-radius: 0;
+          padding: 4px 10px;
           pointer-events: none;
-          box-shadow: 0 0 14px rgba(6,182,212,0.22);
+          box-shadow: 0 0 12px rgba(14,165,233,0.18);
           text-align: center;
           white-space: nowrap;
         ">
-          <div style="font-family: 'JetBrains Mono',monospace; font-size: 16px; font-weight: 700; color: #06b6d4; letter-spacing: 0.06em;">
+          <div style="font-family: 'JetBrains Mono',monospace; font-size: 15px; font-weight: 700; color: #0ea5e9; letter-spacing: 0.08em; text-shadow: 0 0 10px rgba(14,165,233,0.55);">
             FL<span class="fl-num">${flightLevel.toString().padStart(3, '0')}</span>
           </div>
-          <div style="font-family: 'JetBrains Mono',monospace; font-size: 10px; color: rgba(255,255,255,0.45); margin-top: 1px;">
+          <div style="font-family: 'JetBrains Mono',monospace; font-size: 10px; color: rgba(255,255,255,0.40); margin-top: 1px; letter-spacing: 0.05em;">
             <span class="fl-ft">${flightState.altitude_ft.toLocaleString()}</span> ft
             <span class="fl-arrow" style="color:${arrowColor}; margin-left:3px;">${arrow}</span>
           </div>
@@ -575,37 +575,41 @@ export function MapboxGlobe() {
       <div ref={mapContainer} className="w-full h-full" />
 
       {/* ── Map controls overlay ─────────────────────────────────────────── */}
-      <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
+      <div className="absolute top-3 left-3 flex flex-col gap-1 z-10">
         {/* Satellite toggle */}
         <button
           onClick={() => setShowSatellite(s => !s)}
-          className="bg-af-card/90 backdrop-blur px-3 py-1.5 rounded-lg border border-white/10 text-xs font-medium text-white hover:bg-af-card transition-colors"
+          className={`px-3 py-1.5 border text-[11px] font-mono tracking-widest transition-colors ${
+            showSatellite
+              ? 'bg-af-cyan/10 border-af-cyan/40 text-af-cyan atc-glow-cyan'
+              : 'bg-af-card/90 border-white/[0.12] text-white/55 hover:text-white/80 hover:border-white/25'
+          }`}
         >
-          {showSatellite ? '☰ Map' : '🛰 Satellite'}
+          {showSatellite ? '◆ SAT' : '◇ SAT'}
         </button>
 
         {/* Data tags toggle */}
         <button
           onClick={() => setShowDataTags(t => !t)}
-          className={`bg-af-card/90 backdrop-blur px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+          className={`px-3 py-1.5 border text-[11px] font-mono tracking-widest transition-colors ${
             showDataTags
-              ? 'border-af-cyan/40 text-af-cyan'
-              : 'border-white/10 text-white/60 hover:text-white'
+              ? 'bg-af-cyan/10 border-af-cyan/40 text-af-cyan atc-glow-cyan'
+              : 'bg-af-card/90 border-white/[0.12] text-white/55 hover:text-white/80 hover:border-white/25'
           }`}
         >
-          ✈ Traffic Tags
+          {showDataTags ? '◆ TAGS' : '◇ TAGS'}
         </button>
 
         {/* Weather toggle */}
         <button
           onClick={() => setShowWeather(w => !w)}
-          className={`bg-af-card/90 backdrop-blur px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+          className={`px-3 py-1.5 border text-[11px] font-mono tracking-widest transition-colors ${
             showWeather
-              ? 'border-af-orange/40 text-af-orange'
-              : 'border-white/10 text-white/60 hover:text-white'
+              ? 'bg-af-orange/10 border-af-orange/40 text-af-orange atc-glow-orange'
+              : 'bg-af-card/90 border-white/[0.12] text-white/55 hover:text-white/80 hover:border-white/25'
           }`}
         >
-          ☁ Weather
+          {showWeather ? '◆ WX' : '◇ WX'}
         </button>
       </div>
 
@@ -613,44 +617,47 @@ export function MapboxGlobe() {
       {mainInProximity && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
           <div
-            className="bg-af-red/90 backdrop-blur px-4 py-1.5 rounded-full border border-af-red text-xs font-mono font-bold text-white flex items-center gap-2"
+            className="bg-af-header/95 px-4 py-1.5 border border-af-red/70 text-[11px] font-mono font-bold tracking-widest text-af-red flex items-center gap-2 atc-glow-red"
             style={{ animation: 'pulse 1s ease-in-out infinite' }}
           >
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-            PROXIMITY ALERT — TRAFFIC {[...proximityCallsigns].join(', ')}
+            <span className="animate-pulse">■</span>
+            PROXIMITY ALERT — {[...proximityCallsigns].join(' · ')}
           </div>
         </div>
       )}
 
       {/* ── Legend ──────────────────────────────────────────────────────── */}
-      <div className="absolute bottom-3 left-3 bg-af-card/90 backdrop-blur px-3 py-2 rounded-lg border border-white/10 z-10">
-        <div className="flex flex-col gap-1 text-[10px] font-mono">
+      <div className="absolute bottom-3 left-3 bg-af-header/92 border border-white/[0.10] z-10">
+        <div className="px-2 py-1 border-b border-white/[0.08]">
+          <span className="section-label">Legend</span>
+        </div>
+        <div className="flex flex-col gap-1 px-3 py-2 text-[10px] font-mono">
           <div className="flex items-center gap-2">
-            <span className="w-6 h-0.5 bg-af-cyan inline-block" />
-            <span className="text-white/60">{usingAlternateRoute ? 'Active (alternate)' : 'Planned route'}</span>
+            <span className="w-5 h-px bg-af-cyan inline-block" />
+            <span className="text-white/50 tracking-wider uppercase">{usingAlternateRoute ? 'Alt-S Active' : 'Planned'}</span>
           </div>
           {pendingRouteRec && (
             <div className="flex items-center gap-2">
-              <span className="w-6 h-0.5 bg-af-yellow inline-block" style={{ borderBottom: '2px dashed #eab308', height: 0 }} />
-              <span className="text-af-yellow">Recommended route</span>
+              <span className="w-5 inline-block" style={{ borderBottom: '1.5px dashed #f59e0b', height: 0 }} />
+              <span className="text-af-yellow tracking-wider uppercase">Recommended</span>
             </div>
           )}
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-sm bg-af-orange/40 inline-block border border-af-orange/60" />
-            <span className="text-white/60">Turbulence</span>
+            <span className="w-3 h-3 inline-block bg-af-orange/30 border border-af-orange/50" />
+            <span className="text-white/50 tracking-wider uppercase">Turbulence</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-sm bg-af-red/40 inline-block border border-af-red/60" />
-            <span className="text-white/60">Storm cell</span>
+            <span className="w-3 h-3 inline-block bg-af-red/30 border border-af-red/50" />
+            <span className="text-white/50 tracking-wider uppercase">Storm cell</span>
           </div>
         </div>
       </div>
 
       {/* ── Route status badge ───────────────────────────────────────────── */}
-      <div className="absolute bottom-3 right-3 bg-af-card/90 backdrop-blur px-3 py-1.5 rounded-lg border border-white/10 text-xs text-white/60 z-10 font-mono">
-        {usingAlternateRoute
-          ? '🟢 Southern alternate active'
-          : '🔵 LHR → DEL via VIE'}
+      <div className="absolute bottom-3 right-3 bg-af-header/92 border border-white/[0.10] px-3 py-1.5 z-10">
+        <span className={`font-mono text-[11px] tracking-widest uppercase ${usingAlternateRoute ? 'text-af-green atc-glow-green' : 'text-af-cyan atc-glow-cyan'}`}>
+          {usingAlternateRoute ? '● ALT-S ACTIVE' : '● LHR ▸ DEL VIA VIE'}
+        </span>
       </div>
     </div>
   );
