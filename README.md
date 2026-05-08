@@ -5,79 +5,63 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-2496ED.svg)](https://docker.com)
 
-**AI-Powered Flight Decision Support System** — An intelligent multi-agent platform for real-time flight monitoring, weather analysis, fuel optimization, and automated decision recommendations.
+**AI-Powered Flight Decision Support System** — A multi-agent platform for real-time flight monitoring, weather analysis, fuel optimization, and automated pilot recommendations.
 
-![AeroFlux Dashboard](docs/dashboard-preview.png)
+**Live demo: [https://aeroflux.site](https://aeroflux.site)**
+
+---
 
 ## Overview
 
-AeroFlux AI simulates a next-generation Flight Operations Center, integrating multiple AI agents that monitor flight parameters, analyze weather conditions, optimize fuel consumption, ensure passenger comfort, and coordinate with ATC. The system supports both **live flight tracking** via OpenSky Network API and **synthetic flight simulation** for testing and demonstration.
+AeroFlux simulates a next-generation Flight Operations Center. Five AI agents run in parallel each simulation tick, analyzing weather, fuel, ATC constraints, and passenger comfort before a Supervisor agent arbitrates and delivers a single prioritized recommendation to the pilot via the dashboard.
+
+The system supports both **live flight tracking** via OpenSky Network and **synthetic simulation** for demonstration. The default simulation flies a realistic 3,616 NM London Heathrow → New Delhi great-circle route as British Airways flight BA008.
 
 ### Key Features
 
-- **Multi-Agent AI Architecture**: Specialized agents for weather, fuel, ATC, comfort, and supervisory control
-- **Real-time Flight Tracking**: Live aircraft position updates via OpenSky Network
-- **Interactive 3D Globe**: Mapbox GL JS-powered visualization with aircraft markers and route overlays
-- **LHR → DEL Great-Circle Route**: Realistic 3,616 NM London Heathrow to New Delhi flight (BA008) with 9 waypoints
-- **ATC Traffic Layer**: 10 secondary aircraft markers with data tags and proximity alerts (<150 km pulsing ring)
-- **Live Weather Overlays**: 3 animated weather cell polygons with slow eastward drift; SIGMET over Eastern Europe (VIE–IST corridor)
-- **Amber Route Overlay**: Recommended route shown as dashed amber arc before pilot accepts a route change
-- **Altitude Animation**: Smooth cubic ease-in-out altitude transition over 3 seconds on ALTITUDE_CHANGE accept
-- **ETA Countdown**: Dynamic estimated time of arrival updated every simulation tick
-- **LLM-Powered Intelligence**: Supports Ollama (local), Groq, and OpenAI for agent reasoning
-- **WebSocket Communication**: Real-time data streaming between backend and frontend
-- **Docker Orchestration**: Complete containerized deployment with docker-compose
+- **Multi-Agent AI** — Weather, Fuel, ATC, Comfort, and Supervisor agents run in parallel each tick via `asyncio.gather`
+- **LLM-Powered Reasoning** — Each agent calls Groq or Ollama via LiteLLM for structured JSON analysis; rule-based fallback when LLM is unavailable
+- **Real-Time WebSocket Feed** — Backend broadcasts snapshots, recommendations, and agent messages over `/ws/live`
+- **Mapbox Globe** — Interactive 3D map with aircraft marker, great-circle route arcs, ATC traffic with proximity alerts, and animated weather cell polygons
+- **Route Comparison** — Planned route (Eastern Europe headwind) vs. southern alternate (subtropical jet tailwind), with live fuel and ETA deltas
+- **Event Injection** — Inject Turbulence, Headwind, ATC Hold, or Engine Alert mid-flight from the header
+- **Selectable Sim Speed** — 1×, 2×, or 4× simulation speed multiplier
+- **Amber Route Preview** — Recommended alternate route rendered as a dashed amber arc before the pilot accepts
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              AeroFlux AI                                     │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌─────────────────────┐      WebSocket      ┌─────────────────────┐        │
-│  │   React Frontend    │ ◄─────────────────► │   FastAPI Backend   │        │
-│  │   (Mapbox Globe)    │                     │   (Agent Runner)    │        │
-│  └─────────────────────┘                     └──────────┬──────────┘        │
-│                                                        │                     │
-│                              ┌─────────────────────────┼─────────────────┐   │
-│                              │                         │                 │   │
-│                              ▼                         ▼                 ▼   │
-│  ┌─────────────────────────────────────────────────────────────────────────┐│
-│  │                        Multi-Agent System                                ││
-│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐      ││
-│  │  │   Weather   │ │    Fuel     │ │    ATC      │ │   Comfort   │      ││
-│  │  │    Agent    │ │    Agent    │ │    Agent    │ │    Agent    │      ││
-│  │  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘      ││
-│  │         │               │               │               │              ││
-│  │         └───────────────┴───────────────┴───────────────┘              ││
-│  │                                 │                                      ││
-│  │                         ┌───────┴───────┐                              ││
-│  │                         │  Supervisor   │                              ││
-│  │                         │    Agent     │                              ││
-│  │                         └───────────────┘                              ││
-│  └─────────────────────────────────────────────────────────────────────────┘│
-│                              │                                               │
-│                              ▼                                               │
-│  ┌─────────────────────────────────────────────────────────────────────────┐│
-│  │                        External Services                               ││
-│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  ││
-│  │  │   OpenSky    │ │  Aviation    │ │   OpenMeteo  │ │   Ollama/    │  ││
-│  │  │   Network    │ │   Weather    │ │              │ │   Groq LLM   │  ││
-│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘  ││
-│  └─────────────────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                        AeroFlux AI                          │
+│                                                             │
+│  React Frontend (Mapbox GL)  ◄──WebSocket──►  FastAPI       │
+│         (port 8080)                           (port 8000)   │
+│                                                    │        │
+│              ┌─────────────────────────────────────┘        │
+│              ▼                                              │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                  Agent Cycle Runner                   │  │
+│  │  WeatherAgent  FuelAgent  ATCAgent  ComfortAgent      │  │
+│  │           └──────────────────┘                        │  │
+│  │                     SupervisorAgent                   │  │
+│  └───────────────────────────────────────────────────────┘  │
+│              │                                              │
+│   OpenSky Network · Aviation Weather API · Open-Meteo       │
+│   Ollama / Groq (LiteLLM)                                   │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+---
 
 ## Quick Start
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
-- [Git](https://git-scm.com/downloads)
-- Mapbox API Token ([Get one free](https://mapbox.com))
-- (Optional) OpenSky Network credentials for live tracking
-- (Optional) Groq API key for cloud LLM inference
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- [Mapbox API token](https://mapbox.com) (free tier)
+- Groq API key ([free at console.groq.com](https://console.groq.com)) — or run Ollama locally
 
 ### Installation
 
@@ -87,227 +71,265 @@ AeroFlux AI simulates a next-generation Flight Operations Center, integrating mu
    cd Aeroflux
    ```
 
-2. **Configure environment**
+2. **Create the root `.env` file**
    ```bash
-   # Copy the example file and edit
-   cp aeroflux-backend/.env.example aeroflux-backend/.env
-   cp aeroflux-frontend/.env.example aeroflux-frontend/.env
+   # .env (project root)
+   GROQ_API_KEY=gsk_...
+   LLM_PROVIDER=groq
+   LLM_API_KEY=gsk_...
+   LLM_MODEL=llama-3.1-8b-instant
+   LLM_URL=https://api.groq.com/openai/v1
+
+   VITE_MAPBOX_TOKEN=pk.eyJ1...
+   VITE_BACKEND_URL=http://localhost:8000
+
+   OPENSKY_MODE=simulation
    ```
 
-3. **Set your API tokens**
+3. **Build and launch**
    ```bash
-   # Edit aeroflux-backend/.env
-   VITE_MAPBOX_TOKEN=your_mapbox_token_here
-   LLM_PROVIDER=ollama  # or "groq" for cloud
-   
-   # For live flight tracking (optional)
-   OPENSKY_CLIENT_ID=your_opensky_id
-   OPENSKY_CLIENT_SECRET=your_opensky_secret
+   docker compose -f docker-compose.yml up --build -d
    ```
 
-4. **Launch with Docker**
-   ```bash
-   docker-compose up -d
-   ```
+4. **Open the dashboard**
+   - Dashboard: [http://localhost:8080](http://localhost:8080)
+   - Backend API: [http://localhost:8000](http://localhost:8000)
+   - API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-5. **Access the dashboard**
-   - Frontend: http://localhost
-   - Backend API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
+> **Note:** `VITE_BACKEND_URL` is baked into the frontend bundle at build time. If you change it, rebuild the frontend image.
+
+---
 
 ## Agent System
 
 ### Agent Responsibilities
 
-| Agent | Responsibility | Data Sources | LLM Prompting |
-|-------|---------------|--------------|---------------|
-| **Weather Agent** | Monitor SIGMETs, PIREPs, turbulence, route weather hazards | Aviation Weather API, OpenMeteo | Natural language analysis of weather patterns |
-| **Fuel Agent** | Calculate burn rates, endurance, diversion fuel requirements | Breguet equations, wind components | Fuel optimization strategies |
-| **ATC Agent** | Monitor airspace restrictions, NOTAMs, traffic conflicts | OpenSky Network, internal data | ATC coordination protocols |
-| **Comfort Agent** | Track passenger comfort metrics, turbulence impact, cabin pressure | Simulated passenger data | Comfort vs efficiency trade-offs |
-| **Supervisor Agent** | Orchestrate agent outputs, prioritize recommendations, final decisions | All agent outputs | Multi-criteria decision making |
+| Agent | Role | Reasoning |
+|-------|------|-----------|
+| **WeatherAgent** | Analyzes SIGMETs and PIREPs for turbulence risk along the route | LLM + haversine distance checks to hazard zones |
+| **FuelAgent** | Projects remaining fuel, compares headwind/tailwind routes, flags diversions | Breguet equation + LLM optimization |
+| **ATCAgent** | Enforces altitude blocks, speed restrictions, and holding patterns | Hard-coded constraint table + LLM corridor selection |
+| **ComfortAgent** | Estimates ride quality (EDR) from SIGMETs and terrain-induced turbulence | LLM + terrain lookup (Alps, Balkans, Caucasus) |
+| **SupervisorAgent** | Arbitrates across all agent outputs, emits one recommendation per cycle | Priority: ALTITUDE_CHANGE > SPEED_CHANGE > ROUTE_CHANGE; 5-tick cooldown per type |
 
-### Decision Flow
+### Tick Cycle
 
-1. **Snapshot Creation**: System aggregates flight state, weather, fuel, and route data
-2. **Parallel Analysis**: All agents analyze the snapshot simultaneously
-3. **Result Aggregation**: Agent outputs compiled with severity scoring
-4. **Supervisor Review**: Prioritizes recommendations and generates final decision
-5. **Recommendation Delivery**: WebSocket broadcast to frontend dashboard
-6. **Pilot Action**: Accept/dismiss recommendations via UI
+```
+1. SimClock.advance() — increment simulation time T
+2. DataCache.get_snapshot() — assemble current FlightState + weather data
+3. AgentCycleRunner.run_cycle()
+   a. Four agents analyze in parallel (asyncio.gather)
+   b. SupervisorAgent arbitrates and generates a Recommendation
+4. WebSocket broadcast — snapshot / recommendation / agent_message
+5. Sleep TICK_INTERVAL_S (default 20 s, configurable)
+```
+
+---
 
 ## Configuration
 
 ### Environment Variables
 
-#### Backend (`aeroflux-backend/.env`)
+All variables live in a single `.env` at the project root.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENSKY_MODE` | `simulation` | `simulation` or `live` for flight tracking |
-| `OPENSKY_CLIENT_ID` | - | OpenSky Network API username |
-| `OPENSKY_CLIENT_SECRET` | - | OpenSky Network API password |
-| `OPENSKY_ICAO24` | `aa1234` | Target aircraft ICAO24 address |
-| `LLM_PROVIDER` | `ollama` | LLM backend: `ollama`, `groq`, `openai` |
-| `LLM_API_KEY` | - | API key for Groq/OpenAI |
-| `LLM_MODEL` | `llama3.2` | Model name (provider-specific) |
-| `TICK_INTERVAL_S` | `20` | Simulation tick interval in seconds |
-| `LOG_LEVEL` | `INFO` | Logging verbosity |
+| `LLM_PROVIDER` | `groq` | LLM backend: `groq`, `ollama`, `openai` |
+| `LLM_API_KEY` | — | API key for Groq or OpenAI |
+| `LLM_MODEL` | `llama-3.1-8b-instant` | Model name (provider-specific) |
+| `LLM_URL` | `https://api.groq.com/openai/v1` | LLM base URL |
+| `TICK_INTERVAL_S` | `20` | Seconds between simulation ticks |
+| `OPENSKY_MODE` | `simulation` | `simulation` or `live` |
+| `OPENSKY_CLIENT_ID` | — | OpenSky Network username |
+| `OPENSKY_CLIENT_SECRET` | — | OpenSky Network password |
+| `OPENSKY_ICAO24` | — | Target aircraft ICAO24 hex (live mode) |
+| `VITE_MAPBOX_TOKEN` | — | Mapbox GL API token (build-time) |
+| `VITE_BACKEND_URL` | `http://localhost:8000` | Backend URL baked into frontend bundle |
 
-#### Frontend (`aeroflux-frontend/.env`)
+### LLM Providers
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_MAPBOX_TOKEN` | Yes | Mapbox GL API access token |
-
-### LLM Provider Setup
-
-**Local (Ollama)**
+**Groq (cloud, recommended)**
 ```bash
-# Install Ollama and pull model
-ollama pull llama3.2
-
-# Set provider
-LLM_PROVIDER=ollama
-LLM_MODEL=llama3.2
-```
-
-**Cloud (Groq)**
-```bash
-# Get API key from https://console.groq.com
 LLM_PROVIDER=groq
 LLM_API_KEY=gsk_...
 LLM_MODEL=llama-3.1-8b-instant
+LLM_URL=https://api.groq.com/openai/v1
 ```
 
-## Development
-
-### Project Structure
-
-```
-Aeroflux/
-├── aeroflux-backend/           # FastAPI Python backend
-│   ├── agents/                 # AI agent implementations
-│   ├── core/                   # Simulation clock, data cache, runner
-│   ├── models/                 # Pydantic data models
-│   ├── services/               # External API integrations
-│   └── utils/                  # Geo calculations, Breguet equations
-├── aeroflux-frontend/          # React TypeScript frontend
-│   ├── src/components/         # UI components (Globe, Panels)
-│   ├── src/context/            # React state management
-│   └── src/hooks/              # Backend sync, WebSocket hooks
-├── docker-compose.yml          # Production orchestration
-└── docker-compose.override.yml # Local development overrides
-```
-
-### Running Locally (without Docker)
-
-**Backend**
+**Ollama (local)**
 ```bash
-cd aeroflux-backend
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload
+# docker-compose.override.yml is pre-configured for Ollama
+# Run with:
+docker compose up --build -d   # loads override automatically
 ```
+The `docker-compose.override.yml` sets `LLM_MODEL=gemma3:4b` and `LLM_URL=http://host.docker.internal:11434`. Pull the model first with `ollama pull gemma3:4b`.
 
-**Frontend**
-```bash
-cd aeroflux-frontend
-npm install
-npm run dev
-```
+> **Production note:** Always deploy with `-f docker-compose.yml` to skip the Ollama override.
 
-### API Endpoints
+---
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/state` | GET | Current simulation state |
-| `/api/snapshot` | GET | Latest agent snapshot |
-| `/api/recommendations` | GET/POST | List or accept recommendations |
-| `/api/inject` | POST | Inject simulation events |
-| `/ws` | WebSocket | Real-time state streaming |
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Service status and current tick count |
+| `GET` | `/api/snapshot` | Current `SimSnapshot` (flight state + agent data) |
+| `POST` | `/api/tick` | Manually advance one simulation tick |
+| `GET` | `/api/recommendation/latest` | Most recent `Recommendation` object |
+| `POST` | `/api/recommendation/{id}/accept` | Mark recommendation as accepted |
+| `POST` | `/api/recommendation/{id}/dismiss` | Mark recommendation as dismissed |
+| `GET` | `/api/messages` | Last 50 agent messages (filterable by `since_t`) |
+| `POST` | `/api/inject-event` | Inject a flight event (body: `{"event_type": "Turbulence"}`) |
+| `GET` | `/api/routes` | Planned and alternate route waypoints |
+| `WS` | `/ws/live` | WebSocket — streams `snapshot`, `recommendation`, `agent_message` |
+
+Valid `inject-event` types: `Turbulence`, `Headwind`, `ATC Hold`, `Engine Alert`
+
+---
 
 ## Flight Simulation
 
-### London Heathrow → New Delhi (LHR → DEL)
+### Route: LHR → DEL (BA008, Boeing 777-300ER)
 
-The default simulation follows a realistic 3,616 NM great-circle commercial flight path (callsign **BA008**, Boeing 777-300ER):
+| Phase | Ticks | Altitude |
+|-------|-------|----------|
+| Ground | 0 | 0 ft |
+| Climb | 1–4 | 0 → FL360 |
+| Cruise | 5–36 | FL360 |
+| Descent | 37–45 | FL360 → 0 ft |
 
-| Phase | Sim Duration | Altitude Profile |
-|-------|-------------|------------------|
-| Ground | — | 0 ft |
-| Climb | ~30 sim-min | 0 → FL360 |
-| Cruise | ~6 sim-hours | FL360 |
-| Descent | ~30 sim-min | FL360 → 15,000 ft |
-| Approach | ~15 sim-min | 15,000 ft → touchdown |
+Each tick advances 10 simulated minutes. Full route = 45 ticks (7.5 sim-hours). Sim speed multipliers (1×, 2×, 4×) scale the UI tick rate without changing backend tick interval.
 
-Simulation runs at **10 sim-minutes per tick** (45 ticks = 7.5 sim-hours), with selectable speed multipliers (1×, 2×, 4×).
+**Planned route:** LHR → AMS → FRA → VIE → IST → TBS → THR → KHI → DEL
+_(Eastern Europe jet stream, −32 kt headwind component)_
 
-**Planned Route**: LHR → AMS → FRA → VIE → IST → TBS → THR → KHI → DEL
+**Alternate route:** LHR → AMS → MUC → VCE → ATH → ANK → THR → KHI → DEL
+_(Southern path, +22 kt subtropical tailwind)_
 
-**Alternate Route** (southern, avoids Eastern Europe SIGMET): LHR → AMS → MUC → VCE → ATH → ANK → THR → KHI → DEL
-
-**SIGMET**: Active severe turbulence zone over Eastern Europe (VIE–IST corridor)
+**Active SIGMET:** Severe turbulence zone over Eastern Europe (VIE–IST corridor), displayed as an animated red polygon on the map.
 
 ### Live Tracking Mode
 
-Switch to live aircraft tracking by overriding environment variables:
-
 ```bash
-# docker-compose.override.yml
-environment:
-  - OPENSKY_MODE=live
-  - OPENSKY_ICAO24=auto        # auto-discover or set a specific ICAO24 hex
-  - LLM_PROVIDER=ollama        # override file switches to Ollama
+OPENSKY_MODE=live
+OPENSKY_CLIENT_ID=your_username
+OPENSKY_CLIENT_SECRET=your_password
+OPENSKY_ICAO24=A8C5C7   # ICAO24 hex of target aircraft
 ```
+
+---
+
+## Project Structure
+
+```
+Aeroflux/
+├── .env                            # Root config (single file for both services)
+├── docker-compose.yml              # Production orchestration
+├── docker-compose.override.yml     # Local dev overrides (Ollama defaults)
+│
+├── aeroflux-backend/
+│   ├── main.py                     # FastAPI app entry point
+│   ├── config.py                   # Pydantic settings
+│   ├── agents/
+│   │   ├── weather_agent.py
+│   │   ├── fuel_agent.py
+│   │   ├── atc_agent.py
+│   │   ├── comfort_agent.py
+│   │   └── supervisor_agent.py
+│   ├── core/
+│   │   ├── runner.py               # AgentCycleRunner (asyncio.gather)
+│   │   ├── snapshot.py             # SimSnapshot dataclass
+│   │   ├── clock.py                # SimClock
+│   │   └── data_cache.py           # Weather/wind data cache
+│   ├── services/
+│   │   ├── ollama.py               # LiteLLM wrapper (Groq/Ollama/OpenAI)
+│   │   ├── aviation_weather.py     # METAR, SIGMET, PIREP
+│   │   ├── open_meteo.py           # Wind forecasts
+│   │   └── opensky.py              # ADS-B live tracking
+│   ├── models/                     # Pydantic data models
+│   └── utils/
+│       ├── breguet.py              # Fuel burn equations
+│       └── geo.py                  # Haversine, great-circle helpers
+│
+└── aeroflux-frontend/
+    ├── nginx.conf                  # SPA routing + /api/ and /ws/ proxy to backend
+    ├── tailwind.config.js
+    └── src/
+        ├── App.tsx
+        ├── components/
+        │   ├── Header.tsx          # Controls, flight identity, inject dropdown
+        │   ├── RecommendationCard.tsx
+        │   ├── Globe/
+        │   │   ├── MapboxGlobe.tsx # Main map: routes, weather, ATC traffic
+        │   │   ├── AircraftModel.tsx
+        │   │   ├── RouteOverlay.tsx
+        │   │   ├── WaypointMarkers.tsx
+        │   │   └── HazardZone.tsx
+        │   └── Panels/
+        │       ├── LeftPanel.tsx   # Telemetry, sparklines, agent log
+        │       ├── RightPanel.tsx  # Recommendations, route comparison, fuel
+        │       ├── AgentFeed.tsx   # Live agent message stream
+        │       └── Sparkline.tsx
+        ├── context/
+        │   └── SimulationContext.tsx  # Central state + local tick engine
+        ├── hooks/
+        │   └── useBackendSync.ts     # WebSocket listener + REST calls
+        ├── types/
+        │   └── flight.ts             # FlightState, FuelState, Recommendation, etc.
+        └── utils/
+            ├── simulation-data.ts    # PLANNED_ROUTE, ALTERNATE_ROUTE, WEATHER_CELLS
+            └── geo.ts
+```
+
+---
 
 ## Technologies
 
 **Backend**
-- [FastAPI](https://fastapi.tiangolo.com/) - High-performance Python web framework
-- [Pydantic](https://docs.pydantic.dev/) - Data validation and settings management
-- [WebSockets](https://fastapi.tiangolo.com/advanced/websockets/) - Real-time communication
-- [HTTPX](https://www.python-httpx.org/) - Async HTTP client for API calls
+- [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) — async Python web server
+- [LiteLLM](https://litellm.ai/) — unified LLM provider abstraction (Groq / Ollama / OpenAI)
+- [Pydantic v2](https://docs.pydantic.dev/) — data validation and settings
+- [HTTPX](https://www.python-httpx.org/) — async HTTP client for external APIs
 
 **Frontend**
-- [React 18](https://react.dev/) - UI library with hooks and context
-- [TypeScript](https://www.typescriptlang.org/) - Type-safe JavaScript
-- [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/) - Interactive maps, 3D globe, and weather polygons
-- [Three.js / react-three-fiber](https://docs.pmnd.rs/react-three-fiber/) - 3D rendering
-- [Recharts](https://recharts.org/) - Altitude and fuel history charts
-- [Framer Motion](https://www.framer.com/motion/) - Smooth UI animations
-- [Tailwind CSS](https://tailwindcss.com/) - Utility-first styling
-- [Vite](https://vitejs.dev/) - Fast build tooling
-
-**AI/ML**
-- [LiteLLM](https://litellm.ai/) - Unified LLM interface (Ollama, Groq, OpenAI)
-- Custom prompting framework for aviation domain expertise
+- [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vitejs.dev/)
+- [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/) — interactive globe, route arcs, weather polygons
+- [Three.js](https://threejs.org/) / [react-three-fiber](https://docs.pmnd.rs/react-three-fiber/) — 3D aircraft model
+- [Framer Motion](https://www.framer.com/motion/) — agent feed animations
+- [Tailwind CSS](https://tailwindcss.com/) — ATC terminal design system
 
 **Infrastructure**
-- [Docker](https://docker.com/) - Containerization
-- [Docker Compose](https://docs.docker.com/compose/) - Multi-service orchestration
-
-## Security Notes
-
-- All `.env` files are `.gitignore` protected
-- Never commit API keys or tokens
-- Use Docker secrets for production deployments
-- OpenSky credentials are optional (simulation mode works without them)
-
-## License
-
-MIT License - See [LICENSE](LICENSE) for details.
-
-## Acknowledgments
-
-- [OpenSky Network](https://opensky-network.org/) - Aircraft tracking data
-- [Aviation Weather API](https://aviationweather.gov/) - SIGMET and weather data
-- [Open-Meteo](https://open-meteo.com/) - Free weather forecast API
-- [Mapbox](https://mapbox.com/) - Mapping platform
+- [Docker](https://docker.com/) + Docker Compose — containerized build and orchestration
+- Nginx — SPA serving, `/api/` and `/ws/` reverse proxy to backend
+- [Let's Encrypt](https://letsencrypt.org/) — automatic HTTPS via Certbot
 
 ---
 
-**Maintained by [NateChris14](https://github.com/NateChris14)**
+## Development
 
-For issues and feature requests, please use [GitHub Issues](https://github.com/NateChris14/Aeroflux/issues).
+**Backend (without Docker)**
+```bash
+cd aeroflux-backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+**Frontend (without Docker)**
+```bash
+cd aeroflux-frontend
+npm install
+VITE_MAPBOX_TOKEN=pk.eyJ1... VITE_BACKEND_URL=http://localhost:8000 npm run dev
+```
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+**Maintained by [NateChris14](https://github.com/NateChris14)**  
+Issues and feature requests: [GitHub Issues](https://github.com/NateChris14/Aeroflux/issues)
