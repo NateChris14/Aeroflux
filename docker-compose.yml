@@ -31,7 +31,7 @@ services:
         - VITE_BACKEND_URL=${VITE_BACKEND_URL:-http://localhost:8000}
     container_name: aeroflux-frontend
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - backend
     networks:
