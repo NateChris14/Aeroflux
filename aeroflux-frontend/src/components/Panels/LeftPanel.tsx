@@ -70,12 +70,6 @@ export function LeftPanel() {
     warning:  'bg-af-yellow',
     critical: 'bg-af-red',
   };
-  const severityLabel: Record<string, string> = {
-    info:     'text-af-green/70',
-    warning:  'text-af-yellow/80',
-    critical: 'text-af-red/80',
-  };
-
   // Determine LLM status from recent messages
   const latestMessages = agentMessages.slice(-5);
   const lastMsg = agentMessages[agentMessages.length - 1];

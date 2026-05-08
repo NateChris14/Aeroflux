@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useSimulation } from '../../context/SimulationContext';
 import { useBackendSync } from '../../hooks/useBackendSync';
 import { RecommendationCard } from '../RecommendationCard';
-import { Zap, Fuel, Clock, Target, Route } from 'lucide-react';
+import { Zap, Fuel, Clock, Target } from 'lucide-react';
 import { PLANNED_ROUTE, ALTERNATE_ROUTE } from '../../utils/simulation-data';
 import type { Waypoint } from '../../types/flight';
 
