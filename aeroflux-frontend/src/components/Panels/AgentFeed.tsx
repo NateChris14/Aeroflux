@@ -42,21 +42,21 @@ export function AgentFeed() {
   };
 
   return (
-    <div className="h-[220px] bg-af-panel border-t border-white/[0.10] flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-2 border-b border-white/[0.08] flex items-center justify-between">
-        <h3 className="section-label">Agent Feed</h3>
-        {isRunning && (
-          <span className="font-mono text-[11px] text-af-green tracking-widest">■ LIVE</span>
-        )}
+    <div className="h-[220px] bg-af-panel border-t border-af-cyan/[0.10] flex flex-col">
+      {/* ATC-style header bar */}
+      <div className="atc-bar shrink-0">
+        <h3 className="section-label">Agent Communications Log</h3>
+        <span className={`font-mono text-[11px] tracking-widest ${isRunning ? 'text-af-green atc-glow-green' : 'text-white/20'}`}>
+          {isRunning ? '◆ LIVE' : '◇ OFFLINE'}
+        </span>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      <div className="flex-1 overflow-y-auto px-2 py-1 space-y-px">
         <AnimatePresence initial={false}>
           {agentMessages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-white/20 text-xs font-mono tracking-wide">
-              Waiting for agent messages…
+            <div className="flex items-center justify-center h-full text-white/15 text-[11px] font-mono tracking-[0.2em] uppercase">
+              Awaiting transmissions…
             </div>
           ) : (
             agentMessages.slice().reverse().map((msg) => {
@@ -66,31 +66,31 @@ export function AgentFeed() {
               return (
                 <motion.div
                   key={msg.id}
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: -16 }}
-                  transition={{ duration: 0.25 }}
-                  className={`flex items-center gap-3 px-3 py-2 bg-af-card rounded-sm border border-white/[0.07] border-l-2 ${agentBorderAccent[msg.agent] || 'border-l-white/20'} hover:bg-white/[0.02] transition-colors`}
+                  exit={{ opacity: 0, x: -12 }}
+                  transition={{ duration: 0.2 }}
+                  className={`flex items-center gap-3 px-3 py-1.5 bg-af-card border-l-2 ${agentBorderAccent[msg.agent] || 'border-l-white/20'} hover:bg-af-muted transition-colors`}
                 >
                   {/* Agent label */}
-                  <div className={`flex items-center gap-1 font-mono text-[10px] font-semibold tracking-widest shrink-0 ${agentColors[msg.agent] || 'text-white/40'}`}>
-                    <Icon size={10} />
-                    <span>[{msg.agent}]</span>
+                  <div className={`flex items-center gap-1 font-mono text-[10px] font-semibold tracking-[0.15em] shrink-0 ${agentColors[msg.agent] || 'text-white/40'}`}>
+                    <Icon size={9} />
+                    <span>▸{msg.agent}</span>
                   </div>
 
                   {/* Severity */}
-                  <SeverityIcon size={12} className={`shrink-0 ${severityColors[msg.severity] || 'text-white/40'}`} />
+                  <SeverityIcon size={11} className={`shrink-0 ${severityColors[msg.severity] || 'text-white/40'}`} />
 
                   {/* Message */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] text-white/75 truncate font-sans">{msg.message}</p>
+                    <p className="text-[11px] text-white/70 truncate font-sans">{msg.message}</p>
                     {msg.finding && (
-                      <p className="text-[10px] text-white/35 truncate font-mono italic">{msg.finding}</p>
+                      <p className="text-[10px] text-white/30 truncate font-mono italic">{msg.finding}</p>
                     )}
                   </div>
 
                   {/* Timestamp */}
-                  <span className="font-mono text-[10px] text-white/25 whitespace-nowrap tabular-nums">
+                  <span className="font-mono text-[10px] text-white/20 whitespace-nowrap tabular-nums shrink-0">
                     {msg.sim_elapsed}
                   </span>
                 </motion.div>
